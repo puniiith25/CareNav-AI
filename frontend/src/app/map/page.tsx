@@ -39,6 +39,7 @@ function HealthcareMapContent() {
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>(searchParams.get("specialty") || "all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [loading, setLoading] = useState(true);
@@ -172,17 +173,64 @@ function HealthcareMapContent() {
 
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-8.5rem)]">
-      {/* Top Controls: Search + GPS Location Pill + Categories */}
-      <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+      {/* Top Controls: Search with Suggestions Dropdown + GPS Location Pill + Categories */}
+      <div className="flex flex-col md:flex-row gap-3 items-center justify-between relative z-30">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#5c6b73]" />
           <input
             type="text"
             placeholder="Search Bengaluru hospitals, specialties, emergency..."
             value={searchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setTimeout(() => setIsSearchFocused(false), 250)}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-white border border-[#d9d1c3] text-sm text-[#15232b] placeholder-[#5c6b73] outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+            className="w-full pl-10 pr-4 py-2 rounded-xl bg-white border border-[#d9d1c3] text-sm text-[#15232b] placeholder-[#5c6b73] outline-none focus:ring-2 focus:ring-[#0f6e6e] shadow-xs"
           />
+
+          {/* Autocomplete / Suggested Hospitals Dropdown */}
+          {isSearchFocused && (
+            <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-[#d9d1c3] rounded-2xl shadow-xl overflow-hidden z-50 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-top-2">
+              <div className="p-2.5 bg-[#fbf9f4] border-b border-[#ece6d9] text-[11px] font-bold text-[#5c6b73] uppercase tracking-wider flex items-center justify-between">
+                <span>Hospital & Specialty Suggestions</span>
+                <span className="text-[#0f6e6e] font-semibold">{filteredHospitals.length} matches</span>
+              </div>
+              <div className="p-1">
+                {filteredHospitals.slice(0, 6).map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    onMouseDown={() => {
+                      setSelectedHospital(h);
+                      setSearchQuery(h.name);
+                      setTargetCenter({
+                        latitude: h.latitude,
+                        longitude: h.longitude,
+                        zoom: 15,
+                        timestamp: Date.now(),
+                      });
+                      setIsSearchFocused(false);
+                    }}
+                    className="w-full text-left p-2.5 hover:bg-[#e4f2f1] rounded-xl transition-colors flex items-center justify-between group"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <p className="text-xs font-bold text-[#15232b] group-hover:text-[#0f6e6e] truncate">{h.name}</p>
+                      <p className="text-[11px] text-[#5c6b73] truncate flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3 text-[#0f6e6e] shrink-0" />
+                        <span className="truncate">{h.address}</span>
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {h.emergency_available && (
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                          24/7 ER
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
@@ -216,7 +264,39 @@ function HealthcareMapContent() {
               <span>List ({filteredHospitals.length})</span>
             </button>
           </div>
-        </div>
+      </div>
+
+      {/* Quick Suggested Hospital Pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+        <span className="text-[11px] font-bold text-[#5c6b73] shrink-0">Suggestions:</span>
+        {[
+          { name: "Apollo Bannerghatta", query: "Apollo" },
+          { name: "Manipal Hospital", query: "Manipal" },
+          { name: "Fortis Cunningham", query: "Fortis" },
+          { name: "Aster CMI", query: "Aster" },
+          { name: "Bengaluru Heart", query: "Bengaluru Heart" },
+          { name: "24/7 Emergency", query: "emergency" },
+        ].map((sug) => (
+          <button
+            key={sug.name}
+            onClick={() => {
+              setSearchQuery(sug.query);
+              const found = hospitals.find((h) => h.name.toLowerCase().includes(sug.query.toLowerCase()));
+              if (found) {
+                setSelectedHospital(found);
+                setTargetCenter({
+                  latitude: found.latitude,
+                  longitude: found.longitude,
+                  zoom: 15,
+                  timestamp: Date.now(),
+                });
+              }
+            }}
+            className="px-2.5 py-1 rounded-lg bg-white border border-[#d9d1c3] text-[#15232b] hover:bg-[#e4f2f1] hover:border-[#0f6e6e] text-[11px] font-medium whitespace-nowrap transition-colors shadow-2xs"
+          >
+            {sug.name}
+          </button>
+        ))}
       </div>
 
       {/* Category Filter Chips */}
