@@ -2,30 +2,77 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Clock, MapPin, Plus, ChevronRight, ShieldCheck, X } from "lucide-react";
+import { Calendar, Clock, MapPin, Plus, ChevronRight, ShieldCheck, X, Eye, Edit3, User, Building2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
-import { Appointment } from "@/types";
+import { Appointment, FamilyMember } from "@/types";
 
 export default function AppointmentsListPage() {
   const router = useRouter();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [activeTab, setActiveTab] = useState<"upcoming" | "past" | "cancelled">("upcoming");
   const [loading, setLoading] = useState(true);
 
+  // Modal states
+  const [viewingAppt, setViewingAppt] = useState<Appointment | null>(null);
+  const [editingAppt, setEditingAppt] = useState<Appointment | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("10:00");
+  const [editReason, setEditReason] = useState("");
+  const [editMemberId, setEditMemberId] = useState("self");
+  const [isUpdating, setIsUpdating] = useState(false);
+
   useEffect(() => {
-    async function loadAppointments() {
-      try {
-        const data = await api<Appointment[]>("/api/appointments");
-        setAppointments(data || []);
-      } catch (err) {
-        console.error("Error loading appointments:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadAppointments();
+    api<FamilyMember[]>("/api/family-members").then(setFamilyMembers).catch(() => []);
   }, []);
+
+  async function loadAppointments() {
+    try {
+      const data = await api<Appointment[]>("/api/appointments");
+      setAppointments(data || []);
+    } catch (err) {
+      console.error("Error loading appointments:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openEditModal(appt: Appointment) {
+    setEditingAppt(appt);
+    const dateObj = new Date(appt.starts_at);
+    const dateStr = dateObj.toISOString().split("T")[0];
+    const hours = String(dateObj.getUTCHours()).padStart(2, "0");
+    const minutes = String(dateObj.getUTCMinutes()).padStart(2, "0");
+    setEditDate(dateStr);
+    setEditTime(`${hours}:${minutes}`);
+    setEditReason(appt.reason || "");
+    setEditMemberId(appt.family_member_id || "self");
+  }
+
+  async function handleSaveUpdate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingAppt) return;
+    setIsUpdating(true);
+    try {
+      const slotIso = `${editDate}T${editTime}:00+00:00`;
+      await api(`/api/appointments/${editingAppt.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          starts_at: slotIso,
+          reason: editReason,
+          family_member_id: editMemberId,
+        }),
+      });
+      setEditingAppt(null);
+      await loadAppointments();
+    } catch (err: any) {
+      alert(`Could not update appointment: ${err.message || "Failed to update"}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  }
 
   const upcomingAppts = appointments.filter((a) => ["REQUESTED", "CONFIRMED", "UPCOMING"].includes(a.status));
   const pastAppts = appointments.filter((a) => a.status === "COMPLETED");
@@ -115,7 +162,14 @@ export default function AppointmentsListPage() {
                       {a.doctor?.full_name?.replace("Dr. ", "").split(" ").map((n) => n[0]).join("") || "DR"}
                     </div>
                     <div>
-                      <h3 className="font-bold text-base text-[#15232b]">{a.doctor?.full_name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-base text-[#15232b]">{a.doctor?.full_name}</h3>
+                        {a.patient_name && a.patient_name !== "Arjun Mehta" && (
+                          <span className="px-2 py-0.5 rounded-full text-[0.68rem] font-bold bg-[#e4f2f1] text-[#0f6e6e] border border-[#bce2df]">
+                            For: {a.patient_name} {a.relationship ? `(${a.relationship})` : ""}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs font-semibold text-[#0f6e6e]">{a.doctor?.specialty}</div>
                       <div className="text-xs text-[#5c6b73] flex items-center gap-1 mt-1">
                         <MapPin className="w-3.5 h-3.5 text-[#5c6b73] shrink-0" />
@@ -138,9 +192,16 @@ export default function AppointmentsListPage() {
                 </div>
 
                 {a.reason && (
-                  <div className="text-xs text-[#15232b] bg-[#f3efe6] p-3 rounded-xl">
-                    <span className="font-bold text-[#5c6b73]">Reason for visit: </span>
-                    <span>{a.reason}</span>
+                  <div className="text-xs text-[#15232b] bg-[#f3efe6] p-3 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-[#5c6b73]">Reason for visit: </span>
+                      <span>{a.reason}</span>
+                    </div>
+                    {a.patient_name && (
+                      <span className="text-[0.7rem] text-[#5c6b73] font-semibold">
+                        Patient: {a.patient_name}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -151,12 +212,33 @@ export default function AppointmentsListPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {/* View Details Button */}
+                    <button
+                      onClick={() => setViewingAppt(a)}
+                      className="btn btn-ghost text-xs bg-[#f3efe6] hover:bg-[#e4f2f1] text-[#15232b] flex items-center gap-1.5 font-bold"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                      <span>View</span>
+                    </button>
+
+                    {/* Update Appointment Button */}
+                    {activeTab === "upcoming" && (
+                      <button
+                        onClick={() => openEditModal(a)}
+                        className="btn btn-ghost text-xs bg-[#e4f2f1] hover:bg-[#d0ecea] text-[#0f6e6e] flex items-center gap-1.5 font-bold"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                        <span>Update</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => router.push(`/ai?prompt=${encodeURIComponent(`Prepare me for my upcoming consultation with ${a.doctor?.full_name}`)}`)}
                       className="btn btn-ghost text-xs bg-[#f3efe6] hover:bg-[#e4f2f1]"
                     >
-                      AI Visit Preparation
+                      AI Prep
                     </button>
+
                     {activeTab === "upcoming" && (
                       <button
                         onClick={() => handleCancel(a.id)}
@@ -172,6 +254,223 @@ export default function AppointmentsListPage() {
           )}
         </div>
       </div>
+
+      {/* VIEW APPOINTMENT DETAILS MODAL */}
+      {viewingAppt && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-[#d9d1c3] space-y-5 animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-3 border-b border-[#d9d1c3]">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-[#e4f2f1] text-[#0f6e6e] flex items-center justify-center">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#15232b]">Appointment Details</h3>
+                  <p className="text-[0.7rem] text-[#5c6b73]">Reference ID: {viewingAppt.id.slice(0, 8)}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingAppt(null)}
+                className="p-1.5 rounded-xl text-[#5c6b73] hover:bg-[#f3efe6]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs text-[#15232b]">
+              <div className="p-4 rounded-2xl bg-[#fbf9f4] border border-[#d9d1c3] space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[#5c6b73] font-semibold">Patient / Recipient:</span>
+                  <span className="font-bold text-[#0f6e6e] bg-white px-2.5 py-1 rounded-lg border border-[#d9d1c3]">
+                    👤 {viewingAppt.patient_name || "Arjun Mehta (Self)"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[#5c6b73] font-semibold">Status:</span>
+                  <span className="status bg-emerald-100 text-emerald-800">{viewingAppt.status}</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#fbf9f4] border border-[#d9d1c3] space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-[#5c6b73] font-semibold">Doctor / Clinician:</span>
+                  <span className="font-bold">{viewingAppt.doctor?.full_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#5c6b73] font-semibold">Specialty:</span>
+                  <span className="text-[#0f6e6e] font-semibold">{viewingAppt.doctor?.specialty}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#5c6b73] font-semibold">Hospital / Clinic:</span>
+                  <span className="font-semibold">{viewingAppt.hospital?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#5c6b73] font-semibold">Address:</span>
+                  <span className="text-[#5c6b73] text-right">{viewingAppt.hospital?.address}</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#fbf9f4] border border-[#d9d1c3] space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-[#5c6b73] font-semibold">Scheduled Date:</span>
+                  <span className="font-bold">
+                    🗓️ {new Date(viewingAppt.starts_at).toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#5c6b73] font-semibold">Scheduled Time:</span>
+                  <span className="font-bold">
+                    ⏰ {new Date(viewingAppt.starts_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+                {viewingAppt.reason && (
+                  <div className="pt-2 border-t border-[#d9d1c3]/60">
+                    <span className="text-[#5c6b73] font-semibold block mb-1">Reason for Visit:</span>
+                    <p className="p-2.5 rounded-xl bg-white border border-[#d9d1c3]">{viewingAppt.reason}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#d9d1c3]">
+              <button
+                onClick={() => {
+                  const target = viewingAppt;
+                  setViewingAppt(null);
+                  openEditModal(target);
+                }}
+                className="btn btn-ghost text-xs bg-[#e4f2f1] text-[#0f6e6e] flex items-center gap-1.5 font-bold"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Update Appointment</span>
+              </button>
+              <button
+                onClick={() => setViewingAppt(null)}
+                className="btn btn-primary text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPDATE APPOINTMENT MODAL */}
+      {editingAppt && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl border border-[#d9d1c3] space-y-4 animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-3 border-b border-[#d9d1c3]">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-[#e4f2f1] text-[#0f6e6e] flex items-center justify-center">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#15232b]">Update Appointment</h3>
+                  <p className="text-[0.7rem] text-[#5c6b73]">
+                    {editingAppt.doctor?.full_name} ({editingAppt.hospital?.name})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingAppt(null)}
+                className="p-1.5 rounded-xl text-[#5c6b73] hover:bg-[#f3efe6]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUpdate} className="space-y-4">
+              {/* Patient Selection */}
+              <div>
+                <label className="text-xs font-bold text-[#15232b] block mb-1">Who is this visit for?</label>
+                <select
+                  value={editMemberId}
+                  onChange={(e) => setEditMemberId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-[#d9d1c3] bg-white outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+                >
+                  <option value="self">👤 Myself (Arjun Mehta)</option>
+                  {familyMembers.map((fm) => (
+                    <option key={fm.id} value={fm.id}>
+                      {fm.relationship === "Mother" ? "👵" : fm.relationship === "Father" ? "👴" : "👥"} {fm.full_name} ({fm.relationship})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Selection */}
+              <div>
+                <label className="text-xs font-bold text-[#15232b] block mb-1">Select New Date</label>
+                <input
+                  type="date"
+                  required
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-[#d9d1c3] bg-white outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+                />
+              </div>
+
+              {/* Time Slots */}
+              <div>
+                <label className="text-xs font-bold text-[#15232b] block mb-1">Select Time Slot</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { time: "09:30", label: "09:30 AM" },
+                    { time: "10:00", label: "10:00 AM" },
+                    { time: "11:30", label: "11:30 AM" },
+                    { time: "14:00", label: "02:00 PM" },
+                    { time: "15:30", label: "03:30 PM" },
+                    { time: "16:30", label: "04:30 PM" },
+                    { time: "17:15", label: "05:15 PM" },
+                    { time: "18:00", label: "06:00 PM" },
+                  ].map((s) => (
+                    <button
+                      key={s.time}
+                      type="button"
+                      onClick={() => setEditTime(s.time)}
+                      className={`p-2 rounded-xl text-xs font-bold border transition-all ${
+                        editTime === s.time
+                          ? "bg-[#0f6e6e] text-white border-[#0f6e6e]"
+                          : "bg-[#f3efe6] border-[#d9d1c3] text-[#15232b] hover:bg-[#e4f2f1]"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reason for Visit */}
+              <div>
+                <label className="text-xs font-bold text-[#15232b] block mb-1">Reason for Visit / Questions</label>
+                <textarea
+                  rows={2}
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="Describe your concern or reason for consultation..."
+                  className="w-full p-2.5 text-xs rounded-xl border border-[#d9d1c3] outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#d9d1c3]">
+                <button
+                  type="button"
+                  onClick={() => setEditingAppt(null)}
+                  className="btn btn-ghost text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="btn btn-primary text-xs flex items-center gap-1.5"
+                >
+                  {isUpdating ? "Saving Changes..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

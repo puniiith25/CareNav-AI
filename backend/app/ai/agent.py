@@ -65,6 +65,10 @@ def plan_tools(message: str) -> list[tuple[str, dict]]:
         steps.append(("get_health_timeline", {}))
         steps.append(("get_medical_reports", {}))
         steps.append(("get_appointments", {}))
+    elif "family" in m or "mother" in m or "father" in m or "parent" in m or "child" in m or "relative" in m or "member" in m:
+        steps.append(("get_family_members", {}))
+        steps.append(("get_medical_reports", {}))
+        steps.append(("get_appointments", {}))
     elif "consent" in m or "shar" in m:
         steps.append(("get_consent_status", {}))
     elif "recover" in m:

@@ -62,6 +62,8 @@ function AIAssistantContent() {
   // Reports panel & inline viewer state
   const [activeTab, setActiveTab] = useState<"chat" | "reports">("chat");
   const [reports, setReports] = useState<MedicalReport[]>([]);
+  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+  const [selectedFamilyMemberId, setSelectedFamilyMemberId] = useState<string>("all");
   const [selectedReport, setSelectedReport] = useState<MedicalReport | null>(null);
   const [loadingReportDetails, setLoadingReportDetails] = useState(false);
   const [uploadingReport, setUploadingReport] = useState(false);
@@ -87,6 +89,7 @@ function AIAssistantContent() {
   useEffect(() => {
     loadConversations();
     loadReports();
+    api<any[]>("/api/family-members").then(setFamilyMembers).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -545,22 +548,59 @@ function AIAssistantContent() {
         )}
 
         {/* Chat Header */}
-        <div className="p-4 border-b border-[#d9d1c3] bg-[#fbf9f4] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#0f6e6e] text-white flex items-center justify-center font-bold text-sm shadow-xs">
-              <Bot className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="font-bold text-sm text-[#15232b]">CareNav AI Health Assistant</div>
-              <div className="text-[0.7rem] text-[#5c6b73]">
-                Multimodal OCR Vision & Clinical Intelligence
+        <div className="p-3.5 md:p-4 border-b border-[#d9d1c3] bg-[#fbf9f4] space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#0f6e6e] text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                <Bot className="w-5 h-5" />
               </div>
+              <div>
+                <div className="font-bold text-sm text-[#15232b]">CareNav AI Health Assistant</div>
+                <div className="text-[0.7rem] text-[#5c6b73]">
+                  Multimodal Vision & Multi-Family Health Record Intelligence
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[0.7rem] px-2.5 py-1 rounded-full bg-[#e4f2f1] text-[#0b4f4f] font-semibold">
+              Authorized Patient Scope
             </div>
           </div>
 
-          <div className="text-[0.7rem] px-2.5 py-1 rounded-full bg-[#e4f2f1] text-[#0b4f4f] font-semibold">
-            Authorized Patient Scope
-          </div>
+          {/* Family Member Context Filter */}
+          {familyMembers.length > 0 && (
+            <div className="flex items-center gap-1.5 pt-1 overflow-x-auto scrollbar-none text-xs">
+              <span className="text-[0.7rem] font-bold text-[#5c6b73] shrink-0">Asking for:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedFamilyMemberId("all")}
+                className={`px-2.5 py-1 rounded-lg font-bold text-[0.7rem] whitespace-nowrap transition-all ${
+                  selectedFamilyMemberId === "all"
+                    ? "bg-[#0f6e6e] text-white"
+                    : "bg-white border border-[#d9d1c3] text-[#15232b] hover:bg-[#e4f2f1]"
+                }`}
+              >
+                👤 Myself & All
+              </button>
+              {familyMembers.map((fm) => (
+                <button
+                  key={fm.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedFamilyMemberId(fm.id);
+                    sendMessage(`What medical records, notes, and conditions do you have on file for my ${fm.relationship} (${fm.full_name})?`);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[0.7rem] whitespace-nowrap transition-all ${
+                    selectedFamilyMemberId === fm.id
+                      ? "bg-[#0f6e6e] text-white"
+                      : "bg-white border border-[#d9d1c3] text-[#15232b] hover:bg-[#e4f2f1]"
+                  }`}
+                >
+                  {fm.relationship === "Mother" ? "👵" : fm.relationship === "Father" ? "👴" : "👥"} {fm.full_name} ({fm.relationship})
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Messages Feed */}
@@ -573,12 +613,19 @@ function AIAssistantContent() {
               <div>
                 <h3 className="font-bold text-lg text-[#15232b]">How can CareNav assist you today?</h3>
                 <p className="text-xs text-[#5c6b73] mt-1">
-                  Use the camera or upload buttons in the chat bar below to scan reports, or ask any health question.
+                  Ask about your own health records, manage elderly family members, or scan physical lab reports.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-left">
-                {promptSuggestions.map((prompt, i) => (
+                {[
+                  "Explain my latest blood report",
+                  "What health notes are recorded for my parents?",
+                  "I want to consult a cardiologist",
+                  "What medications did my doctor prescribe?",
+                  "Compare my last two reports",
+                  "When is my next appointment?",
+                ].map((prompt, i) => (
                   <button
                     key={i}
                     onClick={() => sendMessage(prompt)}

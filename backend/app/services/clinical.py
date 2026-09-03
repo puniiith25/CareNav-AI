@@ -49,6 +49,8 @@ def create_appointment(
     share_items: list[str],
     duration_label: str,
     confirmed: bool,
+    family_member_id: str | None = None,
+    patient_name: str | None = None,
 ) -> dict:
     if not confirmed:
         raise HTTPException(
@@ -68,10 +70,18 @@ def create_appointment(
     for appt in store.appointments.values():
         if appt["doctor_id"] == doctor_id and iso(appt["starts_at"]) == iso(starts_at) and appt["status"] not in ("CANCELLED", "NO_SHOW"):
             raise HTTPException(status_code=409, detail="That appointment slot is no longer available.")
+    
+    # Check if booking for a family member
+    fm = store.family_members.get(family_member_id) if family_member_id else None
+    resolved_patient_name = fm["full_name"] if fm else (patient_name or (store.profiles.get(principal.user_id) or {}).get("full_name", "Arjun Mehta"))
+    
     appt_id = new_id()
     store.appointments[appt_id] = {
         "id": appt_id,
         "patient_id": principal.patient_id,
+        "family_member_id": family_member_id,
+        "patient_name": resolved_patient_name,
+        "relationship": fm["relationship"] if fm else "Self",
         "doctor_id": doctor_id,
         "hospital_id": doctor["hospital_id"],
         "department_id": doctor.get("department_id"),
@@ -79,7 +89,7 @@ def create_appointment(
         "ends_at": ends_at,
         "status": "CONFIRMED",
         "reason": reason,
-        "notes": "",
+        "notes": f"Booked for {resolved_patient_name} ({fm['relationship'] if fm else 'Account Holder'})",
         "created_at": utcnow(),
     }
     store.booked_slots.add(key)

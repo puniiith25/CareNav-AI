@@ -13,7 +13,34 @@ export function clearToken() {
   localStorage.removeItem("carenav_token");
 }
 
+const apiCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 60 * 1000; // 1 minute in-memory cache for ultra-fast instant page switching
+
+export function invalidateApiCache(pathPrefix?: string) {
+  if (!pathPrefix) {
+    apiCache.clear();
+  } else {
+    for (const key of apiCache.keys()) {
+      if (key.includes(pathPrefix)) apiCache.delete(key);
+    }
+  }
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method || "GET").toUpperCase();
+  const isGet = method === "GET";
+
+  // Check fast in-memory cache for instant client-side page switching
+  if (isGet) {
+    const cached = apiCache.get(path);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return cached.data as T;
+    }
+  } else {
+    // Invalidate cache on mutations (POST, PUT, PATCH, DELETE)
+    invalidateApiCache();
+  }
+
   const headers = new Headers(init.headers);
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -26,5 +53,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     const detail = (data as { detail?: string }).detail || "Something went wrong. Please try again.";
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
+
+  if (isGet) {
+    apiCache.set(path, { data, timestamp: Date.now() });
+  }
+
   return data as T;
 }

@@ -62,6 +62,7 @@ class Store:
         self.booked_slots: set[tuple[str, str]] = set()
         self.caregivers: dict[str, dict] = {}
         self.medication_logs: list[dict] = []
+        self.family_members: dict[str, dict] = {}
         self._seed()
 
     def snapshot(self) -> dict[str, Any]:
@@ -597,6 +598,36 @@ class Store:
             "permissions": ["appointments", "medications", "recovery"],
             "status": "active",
             "created_at": _dt(-15),
+        }
+
+        # Seed Family Members for multi-profile family care
+        fm_mom = new_id()
+        self.family_members[fm_mom] = {
+            "id": fm_mom,
+            "patient_id": I.PATIENT_ID,
+            "full_name": "Savitri Mehta",
+            "relationship": "Mother",
+            "age": 62,
+            "gender": "Female",
+            "blood_group": "B+",
+            "allergies": ["Penicillin"],
+            "chronic_conditions": ["Type 2 Diabetes", "Hypertension"],
+            "notes": "Elderly mother with limited smartphone literacy. Managed by Arjun.",
+            "created_at": _dt(-30),
+        }
+        fm_dad = new_id()
+        self.family_members[fm_dad] = {
+            "id": fm_dad,
+            "patient_id": I.PATIENT_ID,
+            "full_name": "Ramesh Mehta",
+            "relationship": "Father",
+            "age": 66,
+            "gender": "Male",
+            "blood_group": "O+",
+            "allergies": [],
+            "chronic_conditions": ["Joint Arthritis", "High Cholesterol"],
+            "notes": "Requires quarterly lipid and orthopedic checkups.",
+            "created_at": _dt(-30),
         }
 
         jid = new_id()

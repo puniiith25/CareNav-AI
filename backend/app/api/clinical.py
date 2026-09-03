@@ -9,12 +9,14 @@ from app.schemas.api import (
     CancelAppointmentRequest,
     CompareRequest,
     ConsentRequest,
+    FamilyMemberCreate,
     MemoryAction,
     ProfileUpdate,
     RenameConversation,
     MedicationLog,
     CaregiverInvite,
     NavigateRequest,
+    UpdateAppointmentRequest,
 )
 from app.security.authz import Principal, assert_patient_or_authorized_doctor, doctor_may_access_patient
 from app.services.clinical import compare_reports, create_appointment, demo_extract_lipid_panel, list_availability, serialize_appointment, navigate_need
@@ -319,7 +321,46 @@ def book(body: BookAppointmentRequest, principal: Principal = Depends(require_ro
         body.share_items,
         body.duration_label,
         body.confirmed,
+        body.family_member_id,
+        body.patient_name,
     )
+
+
+@router.get("/family-members")
+def get_family_members(principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    fms = [fm for fm in store.family_members.values() if fm["patient_id"] == principal.patient_id]
+    fms.sort(key=lambda x: x.get("created_at") or utcnow(), reverse=False)
+    return [_ser_dt(fm) for fm in fms]
+
+
+@router.post("/family-members")
+def add_family_member(body: FamilyMemberCreate, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    fm_id = new_id()
+    store.family_members[fm_id] = {
+        "id": fm_id,
+        "patient_id": principal.patient_id,
+        "full_name": body.full_name,
+        "relationship": body.relationship,
+        "age": body.age,
+        "gender": body.gender,
+        "blood_group": body.blood_group,
+        "allergies": body.allergies,
+        "chronic_conditions": body.chronic_conditions,
+        "notes": body.notes,
+        "created_at": utcnow(),
+    }
+    store.audit_event(principal.user_id, principal.role, "family_member.added", "family_member", fm_id, {"name": body.full_name, "rel": body.relationship})
+    store.add_timeline(principal.patient_id, "family", f"Added family profile: {body.full_name} ({body.relationship})", "family_members", fm_id, "users")
+    return _ser_dt(store.family_members[fm_id])
+
+
+@router.delete("/family-members/{fm_id}")
+def delete_family_member(fm_id: str, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    fm = store.family_members.get(fm_id)
+    if not fm or fm["patient_id"] != principal.patient_id:
+        raise HTTPException(404, detail="Family member not found.")
+    del store.family_members[fm_id]
+    return {"ok": True, "id": fm_id}
 
 
 @router.patch("/appointments/{appointment_id}")
@@ -327,6 +368,50 @@ def cancel(appointment_id: str, body: CancelAppointmentRequest, principal: Princ
     from app.services.clinical import cancel_appointment
 
     return cancel_appointment(store, principal, appointment_id, body.confirmed)
+
+
+@router.put("/appointments/{appointment_id}")
+def update_appointment(
+    appointment_id: str,
+    body: UpdateAppointmentRequest,
+    principal: Principal = Depends(require_roles("PATIENT")),
+    store: Store = Depends(get_store),
+):
+    appt = store.appointments.get(appointment_id)
+    if not appt or appt["patient_id"] != principal.patient_id:
+        raise HTTPException(404, detail="Appointment not found.")
+
+    if body.starts_at:
+        new_starts = body.starts_at if body.starts_at.tzinfo else body.starts_at.replace(tzinfo=timezone.utc)
+        # Release old slot
+        store.booked_slots.discard((appt["doctor_id"], iso(appt["starts_at"])))
+        # Check slot availability
+        new_key = (appt["doctor_id"], iso(new_starts))
+        if new_key in store.booked_slots:
+            raise HTTPException(409, detail="That appointment slot is no longer available.")
+        store.booked_slots.add(new_key)
+        appt["starts_at"] = new_starts
+        appt["ends_at"] = new_starts + timedelta(minutes=20)
+
+    if body.reason is not None:
+        appt["reason"] = body.reason
+    if body.notes is not None:
+        appt["notes"] = body.notes
+
+    if body.family_member_id is not None:
+        if body.family_member_id == "self":
+            appt["family_member_id"] = None
+            appt["patient_name"] = "Arjun Mehta"
+            appt["relationship"] = "Self"
+        else:
+            fm = store.family_members.get(body.family_member_id)
+            if fm and fm["patient_id"] == principal.patient_id:
+                appt["family_member_id"] = fm["id"]
+                appt["patient_name"] = fm["full_name"]
+                appt["relationship"] = fm["relationship"]
+
+    store.audit_event(principal.user_id, principal.role, "appointment.updated", "appointment", appointment_id, {})
+    return serialize_appointment(store, appt)
 
 
 @router.get("/consents")

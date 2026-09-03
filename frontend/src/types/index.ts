@@ -109,9 +109,26 @@ export interface Medication {
   instructions?: string;
 }
 
+export interface FamilyMember {
+  id: string;
+  patient_id: string;
+  full_name: string;
+  relationship: string;
+  age?: number;
+  gender?: string;
+  blood_group?: string;
+  allergies?: string[];
+  chronic_conditions?: string[];
+  notes?: string;
+  created_at?: string;
+}
+
 export interface Appointment {
   id: string;
   patient_id: string;
+  family_member_id?: string;
+  patient_name?: string;
+  relationship?: string;
   doctor_id: string;
   hospital_id: string;
   department_id?: string;
@@ -119,6 +136,7 @@ export interface Appointment {
   ends_at: string;
   status: "REQUESTED" | "CONFIRMED" | "UPCOMING" | "COMPLETED" | "CANCELLED";
   reason?: string;
+  notes?: string;
   doctor: Doctor;
   hospital: Hospital;
   department?: Department;

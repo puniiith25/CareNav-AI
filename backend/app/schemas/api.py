@@ -39,6 +39,17 @@ class MedicationLog(BaseModel):
     period: str | None = None
 
 
+class FamilyMemberCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    relationship: str = Field(min_length=2, max_length=60) # Mother, Father, Spouse, Child, Sibling, Grandparent, Other
+    age: int | None = None
+    gender: str | None = None
+    blood_group: str | None = None
+    allergies: list[str] = []
+    chronic_conditions: list[str] = []
+    notes: str | None = None
+
+
 class CaregiverInvite(BaseModel):
     name: str
     email: EmailStr
@@ -54,6 +65,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: str | None = None
     image_url: str | None = None
+    family_member_id: str | None = None
 
 
 class BookAppointmentRequest(BaseModel):
@@ -64,10 +76,20 @@ class BookAppointmentRequest(BaseModel):
     share_items: list[str] = []
     duration_label: str = "7 days"
     confirmed: bool = False
+    family_member_id: str | None = None
+    patient_name: str | None = None
 
 
 class CancelAppointmentRequest(BaseModel):
     confirmed: bool = False
+
+
+class UpdateAppointmentRequest(BaseModel):
+    starts_at: datetime | None = None
+    reason: str | None = None
+    notes: str | None = None
+    family_member_id: str | None = None
+    patient_name: str | None = None
 
 
 class ConsentRequest(BaseModel):

@@ -227,8 +227,15 @@ def get_notifications(store: Store, principal: Principal, **kwargs: Any) -> list
     return rows
 
 
+def get_family_members_tool(store: Store, principal: Principal, **kwargs: Any) -> list:
+    pid = _patient_scope(store, principal, kwargs.get("patient_id"))
+    fms = [fm for fm in store.family_members.values() if fm["patient_id"] == pid]
+    return fms
+
+
 TOOL_REGISTRY: dict[str, Callable[..., Any]] = {
     "get_patient_profile": get_patient_profile,
+    "get_family_members": get_family_members_tool,
     "get_health_records": get_health_records,
     "get_medical_reports": get_medical_reports,
     "get_report_details": get_report_details,

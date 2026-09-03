@@ -7,11 +7,15 @@ import { AuthProvider } from "@/lib/auth-context";
 const dmSans = DM_Sans({
   variable: "--font-dm",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,
 });
 
 const sourceSerif = Source_Serif_4({
   variable: "--font-source",
   subsets: ["latin"],
+  display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
