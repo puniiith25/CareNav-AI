@@ -119,9 +119,63 @@ def update_appointment_status(
     if principal.role == "DOCTOR" and appt["doctor_id"] != principal.doctor_id:
         raise HTTPException(403, detail="You don't have permission to update this appointment.")
     
+    old_status = appt.get("status")
     appt["status"] = body.status
     if body.notes:
         appt["notes"] = body.notes
+
+    doc = store.doctors.get(appt.get("doctor_id"))
+    doc_name = doc["full_name"] if doc else "Doctor"
+    pat = store.patients.get(appt.get("patient_id"))
+    pat_user_id = pat["user_id"] if pat else None
+    
+    # Handle Hospital Admin Accept or Reject
+    if body.status in ("CONFIRMED", "ACCEPTED"):
+        if pat_user_id:
+            store.add_notification(
+                pat_user_id,
+                "appointment_confirmed",
+                "Appointment Accepted by Hospital",
+                f"Your appointment with {doc_name} has been approved by the hospital and forwarded to the doctor.",
+                "appointment",
+                appointment_id,
+            )
+        if doc and doc.get("user_id"):
+            store.add_notification(
+                doc["user_id"],
+                "appointment_booked",
+                "New Patient Appointment Approved",
+                f"Hospital Admin has approved an appointment for {appt.get('patient_name', 'Patient')}. Please review in your queue.",
+                "appointment",
+                appointment_id,
+            )
+        store.add_timeline(
+            appt["patient_id"],
+            "appointment_confirmed",
+            f"Appointment Accepted — {doc_name}",
+            "appointments",
+            appointment_id,
+            "calendar",
+        )
+    elif body.status in ("REJECTED", "CANCELLED"):
+        store.booked_slots.discard((appt["doctor_id"], iso(appt["starts_at"])))
+        if pat_user_id:
+            store.add_notification(
+                pat_user_id,
+                "appointment_cancelled",
+                "Appointment Update",
+                f"Your appointment request with {doc_name} could not be accepted. Reason: {body.notes or 'Slot unavailable'}.",
+                "appointment",
+                appointment_id,
+            )
+        store.add_timeline(
+            appt["patient_id"],
+            "appointment_cancelled",
+            f"Appointment Request Declined — {doc_name}",
+            "appointments",
+            appointment_id,
+            "calendar",
+        )
         
     store.audit_event(
         principal.user_id,
@@ -129,7 +183,7 @@ def update_appointment_status(
         "appointment.status_updated",
         "appointment",
         appointment_id,
-        {"status": body.status},
+        {"status": body.status, "old_status": old_status},
     )
     return {"ok": True, "appointment": _ser(appt)}
 
@@ -365,17 +419,99 @@ def create_consultation_note(
         "created_at": utcnow(),
     }
     
-    appt["status"] = "IN_CONSULTATION"
+    appt["status"] = "COMPLETED"
+    doc = store.doctors.get(principal.doctor_id)
+    doc_name = doc["full_name"] if doc else "Attending Doctor"
     
-    # Add timeline event
+    # Automatically generate an official Clinical Consultation Report for the patient
+    rid = new_id()
+    doc_id = new_id()
+    store.documents[doc_id] = {
+        "id": doc_id,
+        "patient_id": body.patient_id,
+        "uploaded_by": principal.user_id,
+        "document_type": "clinical_consultation_report",
+        "title": f"Doctor Consultation Report — {doc_name}",
+        "storage_bucket": "medical-documents",
+        "storage_path": f"{body.patient_id}/{doc_id}",
+        "mime_type": "application/pdf",
+        "status": "READY",
+        "source": "doctor",
+        "appointment_id": body.appointment_id,
+        "created_at": utcnow(),
+        "bytes": 2048,
+    }
+
+    report_summary = (
+        f"Chief Concern: {body.chief_concern}\n\n"
+        f"Clinical Observations: {body.clinical_notes}\n\n"
+        f"Doctor Assessment: {body.assessment}\n\n"
+        f"Treatment Plan & Recommendations: {body.plan}\n\n"
+        f"Follow-up: {body.follow_up_notes or 'As scheduled'}"
+    )
+
+    store.reports[rid] = {
+        "id": rid,
+        "patient_id": body.patient_id,
+        "document_id": doc_id,
+        "report_date": utcnow().date().isoformat(),
+        "hospital_or_lab": doc.get("hospital_name", "Bengaluru Heart & Multispecialty Hospital") if doc else "Bengaluru Multispecialty",
+        "doctor_name": doc_name,
+        "test_name": f"Consultation Review & Clinical Assessment ({doc.get('specialty', 'Cardiology') if doc else 'General'})",
+        "document_type": "Clinical Consultation Report",
+        "notes": report_summary,
+        "extraction_confidence": 1.0,
+        "needs_verification": False,
+        "created_at": utcnow(),
+    }
+
+    # Add parameters/findings values
+    store.report_values.append({
+        "id": new_id(),
+        "report_id": rid,
+        "test_name": "Clinical Assessment Status",
+        "value": "Completed & Verified",
+        "unit": "",
+        "reference_range": "Normal",
+        "notes": body.assessment,
+        "source_location": None,
+        "confidence": 1.0,
+        "needs_verification": False,
+    })
+
+    # Save to official health records
+    store.health_records[rid] = {
+        "id": rid,
+        "patient_id": body.patient_id,
+        "record_type": "medical_report",
+        "title": f"Clinical Consultation Summary — {doc_name}",
+        "source_table": "medical_reports",
+        "source_id": rid,
+        "official": True,
+        "created_at": utcnow(),
+    }
+
+    # Add timeline event for patient
     store.add_timeline(
         body.patient_id,
-        "consultation",
-        f"Clinical Consultation Note — {body.chief_concern[:30]}",
-        "consultations",
-        cid,
-        "stethoscope",
+        "report",
+        f"Clinical Consultation Report from {doc_name}",
+        "medical_reports",
+        rid,
+        "document",
     )
+
+    # Notify patient
+    pat = store.patients.get(body.patient_id)
+    if pat:
+        store.add_notification(
+            pat["user_id"],
+            "doctor_uploaded_document",
+            f"Consultation Report Available from {doc_name}",
+            f"Your doctor has finalized your consultation review and generated your official clinical report.",
+            "medical_report",
+            rid,
+        )
     
     # Audit log
     store.audit_event(
@@ -384,10 +520,10 @@ def create_consultation_note(
         "doctor.create_consultation_note",
         "consultation",
         cid,
-        {"patient_id": body.patient_id},
+        {"patient_id": body.patient_id, "report_id": rid},
     )
     
-    return {"id": cid, "status": "CREATED"}
+    return {"id": cid, "report_id": rid, "status": "CREATED", "message": "Consultation review and report sent to patient."}
 
 
 @router.post("/prescriptions")

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   Phone,
+  PhoneCall,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
@@ -25,13 +26,21 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [aiPrompt, setAiPrompt] = useState("");
 
   useEffect(() => {
     async function fetchDashboard() {
+      // Wait for auth context to fully resolve
+      if (authLoading) return;
+      // Only call the API if we have a logged-in user and a token
+      const token = typeof window !== "undefined" ? localStorage.getItem("carenav_token") : null;
+      if (!user || !token) {
+        setLoading(false);
+        return;
+      }
       try {
         const data = await api<any>("/api/dashboard");
         setDashboardData(data);
@@ -42,7 +51,7 @@ export default function Dashboard() {
       }
     }
     fetchDashboard();
-  }, []);
+  }, [authLoading, user]);
 
   function handleAiSubmit(e: React.FormEvent) {
     e.preventDefault();
