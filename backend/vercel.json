@@ -15,6 +15,11 @@
     }
   ],
   "env": {
+    "APP_ENV": "production",
+    "DEMO_MODE": "true",
+    "APP_SECRET_KEY": "7e388e2df584c37941a52ba8f34037594c09d30ddf9a00f282d70ffe6a5fa351",
+    "AI_PROVIDER": "gemini",
+    "AI_MODEL": "gemini-2.0-flash",
     "CORS_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:3002,https://care-nav-ai-mhyb.vercel.app"
   }
 }
