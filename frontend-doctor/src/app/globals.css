@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sand: #f3efe6;
+  --sand-2: #e7e0d2;
+  --ink: #15232b;
+  --muted: #5c6b73;
+  --teal: #0f6e6e;
+  --teal-dark: #0b4f4f;
+  --card: #fffcf7;
+  --line: #d9d1c3;
+  --danger: #9b2c2c;
+  --ok: #2f6f4e;
+  --warn: #8a5a12;
+}
+
+html,
+body {
+  background: var(--sand);
+  color: var(--ink);
+}
+
+*:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 1.1rem;
+  box-shadow: 0 1px 0 rgba(21, 35, 43, 0.04);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.6rem 1.05rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-primary {
+  background: var(--teal);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--teal-dark);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  background: #e4f2f1;
+  color: var(--teal-dark);
+  font-size: 0.85rem;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.leaflet-container {
+  font-family: inherit;
+  border-radius: 1.1rem;
+  z-index: 0;
+}

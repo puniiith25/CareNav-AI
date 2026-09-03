@@ -18,9 +18,16 @@ import {
   Users,
   Calendar,
   Trash2,
+  Eye,
+  X,
+  Download,
+  Share2,
+  Mail,
+  Check,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
+import { generatePdfDocument } from "@/lib/pdf";
 import { FamilyMember } from "@/types";
 
 export default function HealthRecordsAndMemoryPage() {
@@ -39,6 +46,99 @@ export default function HealthRecordsAndMemoryPage() {
     level3_official_records: [],
   });
   const [loading, setLoading] = useState(true);
+  const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
+
+  // Share state
+  const [sharingRecord, setSharingRecord] = useState<any | null>(null);
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [shareNotes, setShareNotes] = useState("");
+  const [isSendingShare, setIsSendingShare] = useState(false);
+  const [shareSuccessMsg, setShareSuccessMsg] = useState<string | null>(null);
+
+  function handleExportRecordPdf(r: any) {
+    const details = r.details || {};
+    const tableHeaders = ["Test Parameter", "Result", "Reference Range"];
+    const tableRows = details.values
+      ? details.values.map((v: any) => [v.test_name, `${v.value} ${v.unit || ""}`, v.reference_range || "Normal"])
+      : [];
+
+    const sections: any[] = [];
+
+    if (tableRows.length > 0) {
+      sections.push({
+        title: "Clinical Laboratory Parameters",
+        table: { headers: tableHeaders, rows: tableRows },
+      });
+    }
+
+    if (details.medications && details.medications.length > 0) {
+      sections.push({
+        title: "Prescribed Medications",
+        rows: details.medications.map((m: any) => ({
+          label: m.name,
+          value: `${m.dose} · ${m.frequency} (${m.duration}) — ${m.instructions}`,
+        })),
+      });
+    }
+
+    if (details.notes) {
+      sections.push({
+        title: "Clinical Notes & Observations",
+        text: details.notes,
+      });
+    }
+
+    sections.push({
+      title: "Authentication & Validation",
+      rows: [
+        { label: "Document ID", value: r.id },
+        { label: "Verification Level", value: "Level 3 - Officially Verified Record" },
+        { label: "Storage Vault", value: "CareNav Encrypted Patient Health Store" },
+      ],
+    });
+
+    generatePdfDocument({
+      title: r.title,
+      subtitle: `${r.record_type?.replace("_", " ")?.toUpperCase()} — Officially Documented`,
+      patientName: currentMember ? currentMember.full_name : "Arjun Mehta",
+      doctorName: details.doctor_name || "Dr. Ananya Sharma",
+      facilityName: details.hospital_or_lab || details.hospital_name || "Bengaluru Heart & Multispecialty Hospital",
+      date: details.report_date || details.issued_at || new Date().toLocaleDateString(),
+      sections,
+    });
+  }
+
+  async function handleSendShareRecord(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sharingRecord || !recipientEmail) return;
+    setIsSendingShare(true);
+    try {
+      const res = await api<{ message: string }>("/api/share/document", {
+        method: "POST",
+        body: JSON.stringify({
+          recipient_name: recipientName.trim() || "Recipient",
+          recipient_email: recipientEmail.trim(),
+          document_type: "medical_report",
+          record_id: sharingRecord.id,
+          title: sharingRecord.title,
+          notes: shareNotes.trim() || undefined,
+        }),
+      });
+      setShareSuccessMsg(res.message);
+      setTimeout(() => {
+        setSharingRecord(null);
+        setShareSuccessMsg(null);
+        setRecipientName("");
+        setRecipientEmail("");
+        setShareNotes("");
+      }, 2000);
+    } catch (err: any) {
+      alert(`Could not send: ${err.message}`);
+    } finally {
+      setIsSendingShare(false);
+    }
+  }
 
   // Add Member Modal State
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -331,11 +431,34 @@ export default function HealthRecordsAndMemoryPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => setSelectedRecord(r)}
+                    className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] font-semibold flex items-center gap-1 shadow-2xs"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                    <span>View</span>
+                  </button>
+                  <button
+                    onClick={() => handleExportRecordPdf(r)}
+                    className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] font-semibold flex items-center gap-1 shadow-2xs"
+                    title="Export as PDF"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                    <span>PDF</span>
+                  </button>
+                  <button
+                    onClick={() => setSharingRecord(r)}
+                    className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] font-semibold flex items-center gap-1 shadow-2xs"
+                    title="Send and Share Record"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                    <span>Send</span>
+                  </button>
+                  <button
                     onClick={() => router.push("/ai?prompt=" + encodeURIComponent(`Explain what ${r.title} shows and what questions I should prepare for the doctor.`))}
                     className="btn btn-ghost text-xs bg-[#f3efe6] hover:bg-[#e4f2f1] text-[#0f6e6e] font-semibold flex items-center gap-1"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Explain in AI</span>
+                    <span>AI</span>
                   </button>
                   <span className="status bg-emerald-50 text-emerald-800 text-[0.7rem]">Verified</span>
                 </div>
@@ -513,6 +636,281 @@ export default function HealthRecordsAndMemoryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detailed View Health Record Modal */}
+      {selectedRecord && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#fffcf7] rounded-3xl p-6 sm:p-7 max-w-xl w-full shadow-2xl border border-[#d9d1c3] space-y-5 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start pb-3 border-b border-[#d9d1c3]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#e4f2f1] text-[#0f6e6e] flex items-center justify-center font-bold text-lg border border-[#0f6e6e]/20">
+                  📄
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base sm:text-lg text-[#15232b]">{selectedRecord.title}</h3>
+                    <span className="status bg-emerald-50 text-emerald-800 text-[0.65rem] uppercase font-bold">
+                      Verified
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#5c6b73] capitalize">
+                    {selectedRecord.record_type?.replace("_", " ")} · Patient: Arjun Mehta
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedRecord(null)}
+                className="p-1.5 text-[#5c6b73] hover:text-[#15232b] hover:bg-[#f3efe6] rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Record Specific Details */}
+            {selectedRecord.details ? (
+              <div className="space-y-4 text-xs text-[#15232b]">
+                {/* Lab Report Values */}
+                {selectedRecord.details.values && selectedRecord.details.values.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="font-bold text-xs uppercase tracking-wider text-[#0f6e6e] flex items-center justify-between">
+                      <span>Lab Test Results</span>
+                      <span className="text-[10px] text-[#5c6b73] font-normal">
+                        Date: {selectedRecord.details.report_date || "Recent"}
+                      </span>
+                    </div>
+                    <div className="border border-[#d9d1c3] rounded-2xl overflow-hidden bg-white shadow-2xs">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[#f3efe6] text-[10px] uppercase font-bold text-[#5c6b73] border-b border-[#d9d1c3]">
+                          <tr>
+                            <th className="py-2.5 px-3">Test Parameter</th>
+                            <th className="py-2.5 px-3">Result</th>
+                            <th className="py-2.5 px-3">Reference Range</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#d9d1c3]/60">
+                          {selectedRecord.details.values.map((v: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-[#fbf9f4]">
+                              <td className="py-2.5 px-3 font-semibold text-[#15232b]">{v.test_name}</td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-[#0f6e6e]">
+                                {v.value} <span className="text-[10px] font-normal text-[#5c6b73]">{v.unit}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-[#5c6b73]">{v.reference_range || "Normal"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Prescription Info */}
+                {selectedRecord.details.medications && selectedRecord.details.medications.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="font-bold text-xs uppercase tracking-wider text-[#0f6e6e]">
+                      Prescribed Medications
+                    </div>
+                    <div className="space-y-2">
+                      {selectedRecord.details.medications.map((m: any) => (
+                        <div key={m.id} className="bg-white p-3 rounded-xl border border-[#d9d1c3] flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-xs text-[#15232b]">{m.name}</div>
+                            <div className="text-[11px] text-[#5c6b73]">{m.dose} · {m.frequency} ({m.duration})</div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#e4f2f1] text-[#0f6e6e]">
+                            {m.instructions}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clinical Notes & Facility Info */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white p-3 rounded-xl border border-[#d9d1c3]">
+                    <div className="text-[10px] font-bold uppercase text-[#5c6b73]">Doctor / Clinician</div>
+                    <div className="font-semibold text-[#15232b] mt-0.5">
+                      {selectedRecord.details.doctor_name || "Dr. Ananya Sharma"}
+                    </div>
+                    <div className="text-[10px] text-[#0f6e6e]">{selectedRecord.details.specialty || "Cardiology Specialist"}</div>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-[#d9d1c3]">
+                    <div className="text-[10px] font-bold uppercase text-[#5c6b73]">Facility / Hospital</div>
+                    <div className="font-semibold text-[#15232b] mt-0.5">
+                      {selectedRecord.details.hospital_or_lab || selectedRecord.details.hospital_name || "Bengaluru Heart & Multispecialty Hospital"}
+                    </div>
+                    <div className="text-[10px] text-emerald-700">NABH Accredited Demo</div>
+                  </div>
+                </div>
+
+                {selectedRecord.details.notes && (
+                  <div className="bg-white p-3 rounded-xl border border-[#d9d1c3]">
+                    <div className="text-[10px] font-bold uppercase text-[#5c6b73] mb-1">Clinical Notes</div>
+                    <p className="text-xs text-[#15232b] leading-relaxed">{selectedRecord.details.notes}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white p-4 rounded-2xl border border-[#d9d1c3] space-y-2">
+                <div className="text-xs font-semibold text-[#15232b]">Official Health Record Entry</div>
+                <p className="text-xs text-[#5c6b73] leading-relaxed">
+                  This official medical record has been verified and stored in your CareNav Health Vault.
+                </p>
+                <div className="pt-2 text-[11px] text-[#5c6b73] flex items-center justify-between border-t border-[#d9d1c3]/60">
+                  <span>Record ID: {selectedRecord.id?.slice(0, 12)}...</span>
+                  <span className="text-emerald-700 font-semibold">End-to-end Encrypted</span>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#d9d1c3]">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleExportRecordPdf(selectedRecord)}
+                  className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] flex items-center gap-1.5 font-bold shadow-2xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                  <span>Export PDF</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const target = selectedRecord;
+                    setSelectedRecord(null);
+                    setSharingRecord(target);
+                  }}
+                  className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] flex items-center gap-1.5 font-bold shadow-2xs"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                  <span>Send to Email</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const title = selectedRecord.title;
+                    setSelectedRecord(null);
+                    router.push("/ai?prompt=" + encodeURIComponent(`Explain what ${title} shows, discuss the test values, and what lifestyle precautions or questions I should ask my doctor.`));
+                  }}
+                  className="btn btn-ghost text-xs bg-[#e4f2f1] text-[#0f6e6e] font-bold hover:bg-[#d0ecea] flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>AI Explain</span>
+                </button>
+
+                <button
+                  onClick={() => setSelectedRecord(null)}
+                  className="btn btn-primary text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEND & SHARE HEALTH RECORD MODAL */}
+      {sharingRecord && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-[#d9d1c3] space-y-4 animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-3 border-b border-[#d9d1c3]">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-[#e4f2f1] text-[#0f6e6e] flex items-center justify-center">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#15232b]">Send Health Record</h3>
+                  <p className="text-[0.7rem] text-[#5c6b73]">Export PDF & Send to Doctor or Caregiver</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSharingRecord(null)}
+                className="p-1.5 rounded-xl text-[#5c6b73] hover:bg-[#f3efe6]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {shareSuccessMsg ? (
+              <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-2 animate-in fade-in">
+                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
+                  <Check className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-sm text-emerald-900">Sent Successfully!</h4>
+                <p className="text-xs text-emerald-800">{shareSuccessMsg}</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSendShareRecord} className="space-y-3.5">
+                <div className="p-3 rounded-2xl bg-[#fbf9f4] border border-[#d9d1c3] text-xs space-y-1">
+                  <div className="font-bold text-[#15232b]">
+                    📄 {sharingRecord.title}
+                  </div>
+                  <div className="text-[#5c6b73] capitalize">
+                    {sharingRecord.record_type?.replace("_", " ")} · Verified Health Vault Record
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#15232b] block mb-1">Recipient Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Dr. Rajesh Kumar / Family Doctor"
+                    value={recipientName}
+                    onChange={(e) => setRecipientName(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#d9d1c3] outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#15232b] block mb-1">Recipient Email</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="physician@hospital.demo"
+                    value={recipientEmail}
+                    onChange={(e) => setRecipientEmail(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#d9d1c3] outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#15232b] block mb-1">Add Note / Context (Optional)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Attached is my latest blood laboratory report and clinical summary for review."
+                    value={shareNotes}
+                    onChange={(e) => setShareNotes(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-[#d9d1c3] outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-[#d9d1c3]">
+                  <button
+                    type="button"
+                    onClick={() => setSharingRecord(null)}
+                    className="btn btn-ghost text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingShare}
+                    className="btn btn-primary text-xs flex items-center gap-1.5"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>{isSendingShare ? "Sending PDF..." : "Export & Send"}</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

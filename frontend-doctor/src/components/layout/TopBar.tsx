@@ -73,6 +73,22 @@ export function TopBar() {
 
         {/* Right Actions */}
         <div className="flex items-center gap-2 md:gap-3">
+          {/* Portal Quick Switchers */}
+          <div className="hidden lg:flex items-center gap-1.5 bg-[#f3efe6] p-1 rounded-xl border border-[#d9d1c3]">
+            <Link
+              href="/doctor/dashboard"
+              className="px-2.5 py-1 text-xs font-semibold text-[#0f6e6e] hover:bg-white rounded-lg transition-colors"
+            >
+              Doctor Portal
+            </Link>
+            <Link
+              href="/hospital/dashboard"
+              className="px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-white rounded-lg transition-colors"
+            >
+              Hospital Admin
+            </Link>
+          </div>
+
           {/* Emergency Fast Trigger */}
           <Link
             href="/emergency"

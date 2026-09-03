@@ -24,50 +24,24 @@ const createPinIcon = (isEmergency: boolean, isSelected: boolean) => {
   });
 };
 
-// User Location Pin Icon (Blue Pulse Marker)
-const createUserPinIcon = () => {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28" fill="#2563eb" stroke="#ffffff" stroke-width="2">
-      <circle cx="12" cy="12" r="10" fill="#3b82f6" fill-opacity="0.3"/>
-      <circle cx="12" cy="12" r="6" fill="#1d4ed8"/>
-      <circle cx="12" cy="12" r="2.5" fill="#ffffff"/>
-    </svg>
-  `;
-
-  return L.divIcon({
-    className: "user-location-leaflet-marker",
-    html: svg,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-    popupAnchor: [0, -14],
-  });
-};
-
 export default function LeafletMap({
   hospitals,
   selectedHospital,
-  userLocation,
-  targetCenter,
   onSelectHospital,
 }: {
   hospitals: Hospital[];
   selectedHospital: Hospital | null;
-  userLocation?: { latitude: number; longitude: number } | null;
-  targetCenter?: { latitude: number; longitude: number; zoom?: number; timestamp?: number } | null;
   onSelectHospital: (h: Hospital) => void;
 }) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<{ [id: string]: L.Marker }>({});
-  const userMarkerRef = useRef<L.Marker | null>(null);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
-      const initialLat = userLocation?.latitude || 12.9716;
-      const initialLng = userLocation?.longitude || 77.5946;
-      const map = L.map(mapContainerRef.current).setView([initialLat, initialLng], 13);
+      const map = L.map(mapContainerRef.current).setView([12.9716, 77.5946], 13);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
@@ -80,30 +54,7 @@ export default function LeafletMap({
     Object.values(markersRef.current).forEach((m) => m.remove());
     markersRef.current = {};
 
-    // Add user marker if available
-    if (userMarkerRef.current) {
-      userMarkerRef.current.remove();
-      userMarkerRef.current = null;
-    }
-
-    if (userLocation) {
-      const userMarker = L.marker([userLocation.latitude, userLocation.longitude], {
-        icon: createUserPinIcon(),
-        zIndexOffset: 1000,
-      })
-        .addTo(map)
-        .bindPopup(
-          `<div style="font-family:sans-serif; padding:4px; font-weight:bold; font-size:12px; color:#1d4ed8;">
-            📍 Your Current Location
-            <div style="font-weight:normal; font-size:10px; color:#5c6b73; margin-top:2px;">
-              Lat: ${userLocation.latitude.toFixed(4)}, Lng: ${userLocation.longitude.toFixed(4)}
-            </div>
-          </div>`
-        );
-      userMarkerRef.current = userMarker;
-    }
-
-    // Add new hospital markers
+    // Add new markers
     hospitals.forEach((h) => {
       const isSelected = selectedHospital?.id === h.id;
       const marker = L.marker([h.latitude, h.longitude], {
@@ -114,7 +65,6 @@ export default function LeafletMap({
           `<div style="font-family:sans-serif; padding:2px; max-width:200px;">
             <div style="font-weight:bold; font-size:12px; color:#15232b;">${h.name}</div>
             <div style="font-size:11px; color:#5c6b73; margin-top:2px;">${h.address}</div>
-            ${(h as any).distanceKm !== undefined ? `<div style="color:#0f6e6e; font-weight:bold; font-size:11px; margin-top:3px;">📍 ${((h as any).distanceKm).toFixed(1)} km away</div>` : ""}
             ${h.emergency_available ? '<div style="color:#9b2c2c; font-weight:bold; font-size:10px; margin-top:4px;">🚨 24/7 Emergency</div>' : ""}
           </div>`
         )
@@ -128,19 +78,7 @@ export default function LeafletMap({
     return () => {
       // Keep map alive during tab transitions
     };
-  }, [hospitals, userLocation]);
-
-  // Navigate whenever targetCenter is updated (e.g. Current Location button clicked)
-  useEffect(() => {
-    if (targetCenter && mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo([targetCenter.latitude, targetCenter.longitude], targetCenter.zoom || 14, {
-        duration: 1.2,
-      });
-      if (userMarkerRef.current && userLocation && targetCenter.latitude === userLocation.latitude) {
-        userMarkerRef.current.openPopup();
-      }
-    }
-  }, [targetCenter]);
+  }, [hospitals]);
 
   useEffect(() => {
     if (selectedHospital && mapInstanceRef.current) {

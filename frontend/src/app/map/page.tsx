@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, MapPin, Phone, Star, AlertTriangle, Calendar, ChevronRight, List, Map as MapIcon, Check, Stethoscope } from "lucide-react";
+import { Search, MapPin, Phone, Star, AlertTriangle, Calendar, ChevronRight, List, Map as MapIcon, Check, Stethoscope, Navigation, LocateFixed, Compass } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
 import { Hospital } from "@/types";
@@ -18,6 +18,21 @@ const LeafletMap = dynamic(() => import("@/components/map/LeafletMap"), {
   ),
 });
 
+// Haversine formula to compute distance in km
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 function HealthcareMapContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -27,6 +42,12 @@ function HealthcareMapContent() {
   const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [loading, setLoading] = useState(true);
+
+  // User Geolocation State
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [targetCenter, setTargetCenter] = useState<{ latitude: number; longitude: number; zoom?: number; timestamp?: number } | null>(null);
+  const [locationStatus, setLocationStatus] = useState<"detecting" | "granted" | "denied" | "fallback">("detecting");
+  const [locationName, setLocationName] = useState("Locating GPS...");
 
   const categories = [
     { label: "All Facilities", key: "all" },
@@ -39,6 +60,60 @@ function HealthcareMapContent() {
     { label: "Diagnostics", key: "diagnostics" },
   ];
 
+  // Request user GPS position & pan map to it
+  function requestUserLocation() {
+    setLocationStatus("detecting");
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const userCoords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          };
+          setUserLocation(userCoords);
+          setTargetCenter({
+            latitude: userCoords.latitude,
+            longitude: userCoords.longitude,
+            zoom: 14,
+            timestamp: Date.now(),
+          });
+          setLocationStatus("granted");
+          setLocationName("Your Current Location (GPS)");
+        },
+        (err) => {
+          console.warn("Geolocation denied or unavailable:", err.message);
+          // Fallback to central Bengaluru coordinates
+          const fallbackCoords = { latitude: 12.9716, longitude: 77.5946 };
+          setUserLocation(fallbackCoords);
+          setTargetCenter({
+            latitude: fallbackCoords.latitude,
+            longitude: fallbackCoords.longitude,
+            zoom: 14,
+            timestamp: Date.now(),
+          });
+          setLocationStatus("fallback");
+          setLocationName("Central Bengaluru (Default Demo)");
+        },
+        { timeout: 8000, enableHighAccuracy: true }
+      );
+    } else {
+      const fallbackCoords = { latitude: 12.9716, longitude: 77.5946 };
+      setUserLocation(fallbackCoords);
+      setTargetCenter({
+        latitude: fallbackCoords.latitude,
+        longitude: fallbackCoords.longitude,
+        zoom: 14,
+        timestamp: Date.now(),
+      });
+      setLocationStatus("fallback");
+      setLocationName("Central Bengaluru (Default Demo)");
+    }
+  }
+
+  useEffect(() => {
+    requestUserLocation();
+  }, []);
+
   useEffect(() => {
     const spec = searchParams.get("specialty");
     if (spec) setSelectedSpecialty(spec);
@@ -50,9 +125,6 @@ function HealthcareMapContent() {
     try {
       const data = await api<{ hospitals: Hospital[] }>("/api/hospitals");
       setHospitals(data.hospitals || []);
-      if (data.hospitals?.length) {
-        setSelectedHospital(data.hospitals[0]);
-      }
     } catch (err) {
       console.error("Error fetching hospitals:", err);
     } finally {
@@ -60,18 +132,47 @@ function HealthcareMapContent() {
     }
   }
 
-  const filteredHospitals = hospitals.filter((h) => {
-    const matchesQuery = !searchQuery || h.name.toLowerCase().includes(searchQuery.toLowerCase()) || (h.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+  // Calculate distance from user location and sort nearest first
+  const hospitalsWithDistance = hospitals.map((h) => {
+    let distanceKm = 0;
+    if (userLocation) {
+      distanceKm = calculateDistanceKm(userLocation.latitude, userLocation.longitude, h.latitude, h.longitude);
+    }
+    return {
+      ...h,
+      distanceKm,
+    };
+  });
+
+  // Sort nearest first
+  const sortedHospitals = [...hospitalsWithDistance].sort((a, b) => {
+    return (a.distanceKm || 0) - (b.distanceKm || 0);
+  });
+
+  const filteredHospitals = sortedHospitals.filter((h) => {
+    const matchesQuery =
+      !searchQuery ||
+      h.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (h.description || "").toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesQuery) return false;
     if (selectedSpecialty === "all") return true;
     if (selectedSpecialty === "emergency") return h.emergency_available;
-    return h.departments?.some((d) => (d.name + (d.specialty_code || "")).toLowerCase().includes(selectedSpecialty.toLowerCase())) ||
-      (h.description || "").toLowerCase().includes(selectedSpecialty.toLowerCase());
+    return (
+      h.departments?.some((d) => (d.name + (d.specialty_code || "")).toLowerCase().includes(selectedSpecialty.toLowerCase())) ||
+      (h.description || "").toLowerCase().includes(selectedSpecialty.toLowerCase())
+    );
   });
+
+  // Select nearest hospital automatically on first load or list change
+  useEffect(() => {
+    if (filteredHospitals.length > 0 && !selectedHospital) {
+      setSelectedHospital(filteredHospitals[0]);
+    }
+  }, [filteredHospitals, selectedHospital]);
 
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-8.5rem)]">
-      {/* Top Controls: Search + Categories */}
+      {/* Top Controls: Search + GPS Location Pill + Categories */}
       <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative flex-1 w-full max-w-md">
           <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#5c6b73]" />
@@ -85,6 +186,16 @@ function HealthcareMapContent() {
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          {/* User Location Pill */}
+          <button
+            onClick={requestUserLocation}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#e4f2f1] text-[#0f6e6e] border border-[#bce2df] text-xs font-semibold hover:bg-[#d0ecea] transition-all shadow-2xs"
+            title="Recalculate Nearest from Your Current GPS Location"
+          >
+            <LocateFixed className="w-3.5 h-3.5 text-[#0f6e6e] animate-pulse" />
+            <span className="truncate max-w-[160px] sm:max-w-xs">{locationName}</span>
+          </button>
+
           <div className="flex bg-white p-1 rounded-xl border border-[#d9d1c3]">
             <button
               onClick={() => setViewMode("map")}
@@ -132,6 +243,8 @@ function HealthcareMapContent() {
           <LeafletMap
             hospitals={filteredHospitals}
             selectedHospital={selectedHospital}
+            userLocation={userLocation}
+            targetCenter={targetCenter}
             onSelectHospital={(h) => setSelectedHospital(h)}
           />
 
@@ -140,11 +253,19 @@ function HealthcareMapContent() {
             <div className="absolute bottom-4 left-4 right-4 md:right-auto md:max-w-sm bg-[#fffcf7] rounded-2xl border border-[#d9d1c3] p-4 shadow-xl z-[400] animate-in fade-in slide-in-from-bottom-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <h4 className="font-bold text-sm text-[#15232b]">{selectedHospital.name}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-sm text-[#15232b]">{selectedHospital.name}</h4>
+                  </div>
                   <p className="text-xs text-[#5c6b73] flex items-center gap-1 mt-0.5">
                     <MapPin className="w-3.5 h-3.5 text-[#0f6e6e] shrink-0" />
                     <span className="truncate">{selectedHospital.address}</span>
                   </p>
+                  {(selectedHospital as any).distanceKm !== undefined && (
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-[#0f6e6e] mt-1">
+                      <Navigation className="w-3 h-3" />
+                      <span>{((selectedHospital as any).distanceKm).toFixed(1)} km away from you</span>
+                    </div>
+                  )}
                 </div>
                 {selectedHospital.rating && (
                   <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 shrink-0">
@@ -160,12 +281,25 @@ function HealthcareMapContent() {
                     24/7 Emergency
                   </span>
                 )}
-                {selectedHospital.departments?.slice(0, 2).map((d) => (
+                {selectedHospital.departments?.slice(0, 3).map((d) => (
                   <span key={d.id} className="text-[0.68rem] px-2 py-0.5 rounded bg-[#e4f2f1] text-[#0f6e6e] font-semibold">
                     {d.name}
                   </span>
                 ))}
               </div>
+
+              {selectedHospital.description && (
+                <p className="text-[11px] text-[#5c6b73] line-clamp-2 mb-2 leading-relaxed">
+                  {selectedHospital.description}
+                </p>
+              )}
+
+              {selectedHospital.phone && (
+                <div className="text-[11px] text-[#15232b] flex items-center gap-1.5 mb-2 font-medium">
+                  <Phone className="w-3 h-3 text-[#0f6e6e]" />
+                  <span>{selectedHospital.phone}</span>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 pt-2 border-t border-[#d9d1c3]">
                 <button
@@ -212,8 +346,20 @@ function HealthcareMapContent() {
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <h4 className="font-bold text-sm text-[#15232b]">{h.name}</h4>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="font-bold text-sm text-[#15232b]">{h.name}</h4>
+                      {filteredHospitals[0]?.id === h.id && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          Nearest
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-[#5c6b73] mt-0.5 line-clamp-1">{h.address}</p>
+                    {(h as any).distanceKm !== undefined && (
+                      <span className="inline-block text-[11px] font-bold text-[#0f6e6e] mt-1">
+                        📍 {((h as any).distanceKm).toFixed(1)} km away
+                      </span>
+                    )}
                   </div>
                   {h.rating && (
                     <span className="flex items-center gap-1 text-xs font-bold text-amber-800 shrink-0">

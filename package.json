@@ -1,4 +1,16 @@
 {
+  "name": "carenav-ai",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:patient": "npm --prefix frontend run dev",
+    "dev:doctor": "npm --prefix frontend-doctor run dev",
+    "dev:hospital": "npm --prefix frontend-hospital run dev",
+    "build:patient": "npm --prefix frontend run build",
+    "build:doctor": "npm --prefix frontend-doctor run build",
+    "build:hospital": "npm --prefix frontend-hospital run build",
+    "build:all": "npm run build:patient && npm run build:doctor && npm run build:hospital"
+  },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

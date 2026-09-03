@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Clock, MapPin, Plus, ChevronRight, ShieldCheck, X, Eye, Edit3, User, Building2 } from "lucide-react";
+import { Calendar, Clock, MapPin, Plus, ChevronRight, ShieldCheck, X, Eye, Edit3, User, Building2, Download, Share2, Mail, Check } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
+import { generatePdfDocument } from "@/lib/pdf";
 import { Appointment, FamilyMember } from "@/types";
 
 export default function AppointmentsListPage() {
@@ -22,6 +23,89 @@ export default function AppointmentsListPage() {
   const [editReason, setEditReason] = useState("");
   const [editMemberId, setEditMemberId] = useState("self");
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Share state
+  const [sharingAppt, setSharingAppt] = useState<Appointment | null>(null);
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [shareNotes, setShareNotes] = useState("");
+  const [isSendingShare, setIsSendingShare] = useState(false);
+  const [shareSuccessMsg, setShareSuccessMsg] = useState<string | null>(null);
+
+  function handleExportApptPdf(appt: Appointment) {
+    const dateFormatted = new Date(appt.starts_at).toLocaleDateString([], {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const timeFormatted = new Date(appt.starts_at).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    generatePdfDocument({
+      title: "Appointment Confirmation & Care Slip",
+      subtitle: `Reference Booking ID: ${appt.id.slice(0, 12)}`,
+      patientName: appt.patient_name || "Arjun Mehta",
+      doctorName: appt.doctor?.full_name || "Dr. Ananya Sharma",
+      facilityName: appt.hospital?.name || "Bengaluru Heart & Multispecialty Hospital",
+      date: dateFormatted,
+      sections: [
+        {
+          title: "Visit & Schedule Overview",
+          rows: [
+            { label: "Patient Name", value: appt.patient_name || "Arjun Mehta (Self)" },
+            { label: "Doctor / Clinician", value: `${appt.doctor?.full_name} (${appt.doctor?.specialty})` },
+            { label: "Hospital / Center", value: appt.hospital?.name || "Bengaluru Heart & Multispecialty Hospital" },
+            { label: "Facility Address", value: appt.hospital?.address || "Demo Medical Facility, Bengaluru" },
+            { label: "Scheduled Appointment Date", value: dateFormatted },
+            { label: "Scheduled Time Slot", value: timeFormatted },
+            { label: "Status", value: appt.status },
+          ],
+        },
+        {
+          title: "Clinical Reason & Notes",
+          text: appt.reason || "General consultation and health review.",
+        },
+        {
+          title: "Patient Instructions & Preparation",
+          text: "Please arrive 15 minutes before your scheduled slot. Bring your previous lab reports, medication slips, and photo ID. Time-limited consent is enabled for your shared medical records.",
+        },
+      ],
+    });
+  }
+
+  async function handleSendShare(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sharingAppt || !recipientEmail) return;
+    setIsSendingShare(true);
+    try {
+      const res = await api<{ message: string }>("/api/share/document", {
+        method: "POST",
+        body: JSON.stringify({
+          recipient_name: recipientName.trim() || "Recipient",
+          recipient_email: recipientEmail.trim(),
+          document_type: "appointment_summary",
+          record_id: sharingAppt.id,
+          title: `Appointment Confirmation - ${sharingAppt.doctor?.full_name}`,
+          notes: shareNotes.trim() || undefined,
+        }),
+      });
+      setShareSuccessMsg(res.message);
+      setTimeout(() => {
+        setSharingAppt(null);
+        setShareSuccessMsg(null);
+        setRecipientName("");
+        setRecipientEmail("");
+        setShareNotes("");
+      }, 2000);
+    } catch (err: any) {
+      alert(`Could not send: ${err.message}`);
+    } finally {
+      setIsSendingShare(false);
+    }
+  }
 
   useEffect(() => {
     loadAppointments();
@@ -221,6 +305,26 @@ export default function AppointmentsListPage() {
                       <span>View</span>
                     </button>
 
+                    {/* Export as PDF Button */}
+                    <button
+                      onClick={() => handleExportApptPdf(a)}
+                      className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] flex items-center gap-1.5 font-bold shadow-2xs"
+                      title="Export as PDF"
+                    >
+                      <Download className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                      <span>PDF</span>
+                    </button>
+
+                    {/* Send & Share Button */}
+                    <button
+                      onClick={() => setSharingAppt(a)}
+                      className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] flex items-center gap-1.5 font-bold shadow-2xs"
+                      title="Send and Share Appointment"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                      <span>Send</span>
+                    </button>
+
                     {/* Update Appointment Button */}
                     {activeTab === "upcoming" && (
                       <button
@@ -332,24 +436,48 @@ export default function AppointmentsListPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#d9d1c3]">
-              <button
-                onClick={() => {
-                  const target = viewingAppt;
-                  setViewingAppt(null);
-                  openEditModal(target);
-                }}
-                className="btn btn-ghost text-xs bg-[#e4f2f1] text-[#0f6e6e] flex items-center gap-1.5 font-bold"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Update Appointment</span>
-              </button>
-              <button
-                onClick={() => setViewingAppt(null)}
-                className="btn btn-primary text-xs"
-              >
-                Close
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-[#d9d1c3]">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleExportApptPdf(viewingAppt)}
+                  className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] flex items-center gap-1.5 font-bold shadow-2xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                  <span>Export PDF</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const target = viewingAppt;
+                    setViewingAppt(null);
+                    setSharingAppt(target);
+                  }}
+                  className="btn btn-ghost text-xs bg-white hover:bg-[#f3efe6] border border-[#d9d1c3] text-[#15232b] flex items-center gap-1.5 font-bold shadow-2xs"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                  <span>Send to Email</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const target = viewingAppt;
+                    setViewingAppt(null);
+                    openEditModal(target);
+                  }}
+                  className="btn btn-ghost text-xs bg-[#e4f2f1] text-[#0f6e6e] flex items-center gap-1.5 font-bold"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Update</span>
+                </button>
+                <button
+                  onClick={() => setViewingAppt(null)}
+                  className="btn btn-primary text-xs"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -468,6 +596,105 @@ export default function AppointmentsListPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SEND & SHARE APPOINTMENT SUMMARY MODAL */}
+      {sharingAppt && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-[#d9d1c3] space-y-4 animate-in zoom-in-95">
+            <div className="flex justify-between items-center pb-3 border-b border-[#d9d1c3]">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-[#e4f2f1] text-[#0f6e6e] flex items-center justify-center">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#15232b]">Send Appointment Slip</h3>
+                  <p className="text-[0.7rem] text-[#5c6b73]">Export PDF & Send to Family or Caregiver</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSharingAppt(null)}
+                className="p-1.5 rounded-xl text-[#5c6b73] hover:bg-[#f3efe6]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {shareSuccessMsg ? (
+              <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-2 animate-in fade-in">
+                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
+                  <Check className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-sm text-emerald-900">Sent Successfully!</h4>
+                <p className="text-xs text-emerald-800">{shareSuccessMsg}</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSendShare} className="space-y-3.5">
+                <div className="p-3 rounded-2xl bg-[#fbf9f4] border border-[#d9d1c3] text-xs space-y-1">
+                  <div className="font-bold text-[#15232b]">
+                    {sharingAppt.doctor?.full_name} ({sharingAppt.hospital?.name})
+                  </div>
+                  <div className="text-[#5c6b73]">
+                    🗓️ {new Date(sharingAppt.starts_at).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })} at {new Date(sharingAppt.starts_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#15232b] block mb-1">Recipient Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ramesh Mehta / Dr. Family Physician"
+                    value={recipientName}
+                    onChange={(e) => setRecipientName(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#d9d1c3] outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#15232b] block mb-1">Recipient Email</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="caregiver@carenav.demo"
+                    value={recipientEmail}
+                    onChange={(e) => setRecipientEmail(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-[#d9d1c3] outline-none focus:ring-2 focus:ring-[#0f6e6e]"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#15232b] block mb-1">Add Note / Context (Optional)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Here is the confirmed appointment schedule and facility address."
+                    value={shareNotes}
+                    onChange={(e) => setShareNotes(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-[#d9d1c3] outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-[#d9d1c3]">
+                  <button
+                    type="button"
+                    onClick={() => setSharingAppt(null)}
+                    className="btn btn-ghost text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingShare}
+                    className="btn btn-primary text-xs flex items-center gap-1.5"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>{isSendingShare ? "Sending PDF..." : "Export & Send"}</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

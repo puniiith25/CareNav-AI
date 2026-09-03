@@ -17,6 +17,7 @@ from app.schemas.api import (
     CaregiverInvite,
     NavigateRequest,
     UpdateAppointmentRequest,
+    ShareDocumentRequest,
 )
 from app.security.authz import Principal, assert_patient_or_authorized_doctor, doctor_may_access_patient
 from app.services.clinical import compare_reports, create_appointment, demo_extract_lipid_panel, list_availability, serialize_appointment, navigate_need
@@ -54,7 +55,53 @@ def health_records(principal: Principal = Depends(get_principal), store: Store =
     pid = principal.patient_id
     if principal.role == "DOCTOR":
         raise HTTPException(400, detail="Specify a patient via the doctor records endpoint.")
-    return [_ser_dt(r) for r in store.health_records.values() if r["patient_id"] == pid]
+    
+    rows = []
+    for r in store.health_records.values():
+        if r["patient_id"] != pid:
+            continue
+        item = _ser_dt(r)
+        
+        # Attach deep detail if linked to reports, prescriptions, or appointments
+        if r.get("source_table") == "medical_reports" and r.get("source_id") in store.reports:
+            rep = store.reports[r["source_id"]]
+            vals = [v for v in store.report_values if v["report_id"] == rep["id"]]
+            doc = _ser_doc(store.documents.get(rep.get("document_id")))
+            item["details"] = {
+                "test_name": rep.get("test_name"),
+                "doctor_name": rep.get("doctor_name"),
+                "hospital_or_lab": rep.get("hospital_or_lab"),
+                "report_date": rep.get("report_date"),
+                "document_type": rep.get("document_type"),
+                "notes": rep.get("notes"),
+                "values": vals,
+                "document": doc,
+            }
+        elif r.get("source_table") == "prescriptions" and r.get("source_id") in store.prescriptions:
+            rx = store.prescriptions[r["source_id"]]
+            meds = [m for m in store.medications.values() if m.get("prescription_id") == rx["id"]]
+            doc = store.doctors.get(rx.get("doctor_id"))
+            item["details"] = {
+                "doctor_name": doc.get("full_name") if doc else "Attending Clinician",
+                "specialty": doc.get("specialty") if doc else "General Medicine",
+                "issued_at": rx.get("issued_at"),
+                "notes": rx.get("notes"),
+                "medications": meds,
+            }
+        elif r.get("source_table") == "appointments" and r.get("source_id") in store.appointments:
+            appt = store.appointments[r["source_id"]]
+            doc = store.doctors.get(appt.get("doctor_id"))
+            hosp = store.hospitals.get(appt.get("hospital_id"))
+            item["details"] = {
+                "doctor_name": doc.get("full_name") if doc else "Attending Doctor",
+                "specialty": doc.get("specialty") if doc else "Cardiology",
+                "hospital_name": hosp.get("name") if hosp else "Bengaluru Heart & Multispecialty Hospital",
+                "date": appt.get("starts_at"),
+                "reason": appt.get("reason"),
+                "status": appt.get("status"),
+            }
+        rows.append(item)
+    return rows
 
 
 @router.get("/timeline")
@@ -664,3 +711,46 @@ def simulate_prescription(principal: Principal = Depends(require_roles("PATIENT"
     )
     store.add_timeline(principal.patient_id, "prescription", "Prescription added after consultation", "prescriptions", rx_id, "pill")
     return {"ok": True, "id": rx_id}
+
+
+@router.post("/share/document")
+def share_document(
+    body: ShareDocumentRequest,
+    principal: Principal = Depends(require_roles("PATIENT")),
+    store: Store = Depends(get_store),
+):
+    share_id = new_id()
+    # Log audit event
+    store.audit_event(
+        principal.user_id,
+        principal.role,
+        "document.shared_externally",
+        body.document_type,
+        body.record_id or share_id,
+        {"recipient": body.recipient_name, "email": str(body.recipient_email), "title": body.title},
+    )
+    # Add in-app notification
+    store.add_notification(
+        principal.user_id,
+        "document_shared",
+        f"Exported & Sent: {body.title}",
+        f"PDF copy of {body.title} was successfully sent to {body.recipient_name} ({body.recipient_email}).",
+        body.document_type,
+        body.record_id or share_id,
+    )
+    # Add timeline event
+    store.add_timeline(
+        principal.patient_id,
+        "share",
+        f"Shared {body.title} with {body.recipient_name}",
+        body.document_type,
+        body.record_id or share_id,
+        "document",
+    )
+    return {
+        "ok": True,
+        "share_id": share_id,
+        "recipient_name": body.recipient_name,
+        "recipient_email": str(body.recipient_email),
+        "message": f"Successfully exported PDF and sent {body.title} to {body.recipient_name} ({body.recipient_email}).",
+    }

@@ -57,6 +57,15 @@ class CaregiverInvite(BaseModel):
     confirmed: bool = False
 
 
+class ShareDocumentRequest(BaseModel):
+    recipient_name: str
+    recipient_email: EmailStr
+    document_type: str = "appointment_summary" # "appointment_summary", "medical_report", "health_record"
+    record_id: str | None = None
+    title: str
+    notes: str | None = None
+
+
 class NavigateRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
 

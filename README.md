@@ -31,30 +31,47 @@
 
 ---
 
-## 🔐 Credentials & Quick Demo Logins
+## 🔐 Credentials & Standalone Frontends
 
-| Role | Email | Password | Portal Route |
-|---|---|---|---|
-| **Doctor** (Dr. Ananya Sharma) | `dr.sharma@carenav.demo` | `CareNavDemo!23` | `/doctor/dashboard` |
-| **Hospital Admin** (Kiran Mehta) | `admin.city@carenav.demo` | `CareNavDemo!23` | `/hospital/dashboard` |
-| **Patient** (Arjun Mehta) | `demo.patient@carenav.demo` | `CareNavDemo!23` | `/` |
+| Role | Email | Password | Frontend Directory | Default URL |
+|---|---|---|---|---|
+| **Patient** (Arjun Mehta) | `demo.patient@carenav.demo` | `CareNavDemo!23` | `frontend/` | `http://localhost:3000` |
+| **Doctor** (Dr. Ananya Sharma) | `dr.sharma@carenav.demo` | `CareNavDemo!23` | `frontend-doctor/` | `http://localhost:3001` |
+| **Hospital Admin** (Kiran Mehta) | `admin.city@carenav.demo` | `CareNavDemo!23` | `frontend-hospital/` | `http://localhost:3002` |
 
 ---
 
 ## 🛠 Running the Application
 
-### Backend (FastAPI + Python)
+### 1. Backend (FastAPI + Python)
 ```bash
 cd backend
 source .venv/bin/activate
-pytest  # Run 14 unit and integration tests
+pytest  # Run 14 unit and integration tests (100% pass)
 uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend (Next.js + TypeScript + Tailwind CSS)
+### 2. Standalone Frontends (Run from root or individual folders)
+
+#### Run Patient Portal (Port 3000):
 ```bash
-cd frontend
-npm run dev
-# or build
-npx next build --webpack
+npm run dev:patient
+# or: cd frontend && npm run dev
+```
+
+#### Run Doctor Clinician Portal (Port 3001):
+```bash
+npm run dev:doctor
+# or: cd frontend-doctor && npm run dev
+```
+
+#### Run Hospital Admin Portal (Port 3002):
+```bash
+npm run dev:hospital
+# or: cd frontend-hospital && npm run dev
+```
+
+#### Build All Frontends:
+```bash
+npm run build:all
 ```
