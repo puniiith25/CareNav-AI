@@ -39,6 +39,19 @@ class MedicationLog(BaseModel):
     period: str | None = None
 
 
+class MedicationReminderCreate(BaseModel):
+    medication_name: str = Field(min_length=1, max_length=120)
+    dosage: str = Field(default="1 dose", max_length=60)
+    time: str = Field(default="08:00")  # HH:MM
+    period: str = Field(default="morning")  # morning, afternoon, evening, night, custom
+    frequency: str = Field(default="daily")  # daily, weekly, alternate_days, as_needed
+    food_timing: str = Field(default="after_food")  # before_food, after_food, with_food, empty_stomach
+    channels: list[str] = Field(default=["in_app", "email"])  # in_app, email, sms, push
+    reminder_days: list[str] = Field(default=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+    notes: str | None = None
+    enabled: bool = True
+
+
 class FamilyMemberCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     relationship: str = Field(min_length=2, max_length=60) # Mother, Father, Spouse, Child, Sibling, Grandparent, Other

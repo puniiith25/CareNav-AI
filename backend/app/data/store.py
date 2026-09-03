@@ -63,6 +63,7 @@ class Store:
         self.caregivers: dict[str, dict] = {}
         self.medication_logs: list[dict] = []
         self.family_members: dict[str, dict] = {}
+        self.reminders: dict[str, dict] = {}
         self._seed()
 
     def snapshot(self) -> dict[str, Any]:
@@ -612,6 +613,25 @@ class Store:
                 "extracted_exactly": True,
             }
             self.schedules.append({"id": new_id(), "medication_id": mid, "period": period, "reminder_enabled": True})
+            rem_id = new_id()
+            self.reminders[rem_id] = {
+                "id": rem_id,
+                "patient_id": I.PATIENT_ID,
+                "medication_id": mid,
+                "medication_name": name,
+                "dosage": dose,
+                "time": "08:30" if period == "morning" else "21:00",
+                "period": period,
+                "frequency": "daily" if period == "night" else "weekly",
+                "food_timing": "after_food",
+                "channels": ["in_app", "email", "sms"],
+                "reminder_days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                "notes": instr,
+                "enabled": True,
+                "snooze_count": 0,
+                "last_notified": None,
+                "created_at": utcnow(),
+            }
 
         plan_id = new_id()
         self.recovery_plans[plan_id] = {

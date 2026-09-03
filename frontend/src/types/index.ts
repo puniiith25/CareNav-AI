@@ -109,6 +109,25 @@ export interface Medication {
   instructions?: string;
 }
 
+export interface MedicationReminder {
+  id: string;
+  patient_id: string;
+  medication_id?: string;
+  medication_name: string;
+  dosage: string;
+  time: string;
+  period: "morning" | "afternoon" | "evening" | "night" | "custom";
+  frequency: "daily" | "weekly" | "alternate_days" | "as_needed";
+  food_timing: "before_food" | "after_food" | "with_food" | "empty_stomach";
+  channels: string[];
+  reminder_days: string[];
+  notes?: string;
+  enabled: boolean;
+  snooze_count?: number;
+  last_notified?: string;
+  created_at?: string;
+}
+
 export interface FamilyMember {
   id: string;
   patient_id: string;

@@ -14,6 +14,7 @@ from app.schemas.api import (
     ProfileUpdate,
     RenameConversation,
     MedicationLog,
+    MedicationReminderCreate,
     CaregiverInvite,
     NavigateRequest,
     UpdateAppointmentRequest,
@@ -119,7 +120,113 @@ def medications(principal: Principal = Depends(require_roles("PATIENT")), store:
         for s in store.schedules:
             if s["medication_id"] == m["id"]:
                 schedule[s["period"]].append(m)
-    return {"medications": meds, "today": schedule}
+    rems = [r for r in store.reminders.values() if r["patient_id"] == principal.patient_id]
+    return {"medications": meds, "today": schedule, "reminders": [_ser_dt(r) for r in rems]}
+
+
+@router.post("/medications/reminders")
+def create_medication_reminder(body: MedicationReminderCreate, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    rid = new_id()
+    item = {
+        "id": rid,
+        "patient_id": principal.patient_id,
+        "medication_id": None,
+        "medication_name": body.medication_name,
+        "dosage": body.dosage,
+        "time": body.time,
+        "period": body.period,
+        "frequency": body.frequency,
+        "food_timing": body.food_timing,
+        "channels": body.channels,
+        "reminder_days": body.reminder_days,
+        "notes": body.notes,
+        "enabled": body.enabled,
+        "snooze_count": 0,
+        "last_notified": None,
+        "created_at": utcnow(),
+    }
+    store.reminders[rid] = item
+    store.add_notification(
+        principal.user_id,
+        "medication_reminder_created",
+        f"Reminder set for {body.medication_name}",
+        f"Scheduled for {body.time} ({body.frequency}, {body.food_timing.replace('_', ' ')}).",
+        "medication",
+        rid,
+    )
+    store.audit_event(principal.user_id, principal.role, "medication_reminder.created", "medication_reminder", rid, {"medication": body.medication_name})
+    return _ser_dt(item)
+
+
+@router.patch("/medications/reminders/{reminder_id}/toggle")
+def toggle_medication_reminder(reminder_id: str, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    rem = store.reminders.get(reminder_id)
+    if not rem or rem["patient_id"] != principal.patient_id:
+        raise HTTPException(404, detail="Medication reminder not found.")
+    rem["enabled"] = not rem.get("enabled", True)
+    return _ser_dt(rem)
+
+
+@router.post("/medications/reminders/{reminder_id}/trigger")
+def trigger_medication_reminder(reminder_id: str, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    rem = store.reminders.get(reminder_id)
+    if not rem or rem["patient_id"] != principal.patient_id:
+        raise HTTPException(404, detail="Medication reminder not found.")
+    
+    rem["last_notified"] = utcnow()
+    notif = store.add_notification(
+        principal.user_id,
+        "medication_due",
+        f"🔔 Time for {rem['medication_name']} ({rem['dosage']})",
+        f"Scheduled for {rem['time']} · Please take {rem['food_timing'].replace('_', ' ')}.",
+        "medication",
+        reminder_id,
+    )
+    store.add_timeline(
+        principal.patient_id,
+        "medication_due",
+        f"Medication Due Alert: {rem['medication_name']} ({rem['dosage']})",
+        "medications",
+        reminder_id,
+        "pill",
+    )
+    return {"ok": True, "reminder": _ser_dt(rem), "notification": _ser_dt(notif)}
+
+
+@router.post("/medications/reminders/{reminder_id}/take")
+def mark_reminder_taken(reminder_id: str, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    rem = store.reminders.get(reminder_id)
+    if not rem or rem["patient_id"] != principal.patient_id:
+        raise HTTPException(404, detail="Medication reminder not found.")
+    
+    log_id = new_id()
+    store.medication_logs.append({
+        "id": log_id,
+        "medication_id": rem.get("medication_id") or reminder_id,
+        "reminder_id": reminder_id,
+        "action": "taken",
+        "period": rem.get("period", "morning"),
+        "at": utcnow(),
+        "patient_id": principal.patient_id,
+    })
+    store.add_timeline(
+        principal.patient_id,
+        "medication_taken",
+        f"Dose Completed: {rem['medication_name']} ({rem['dosage']})",
+        "medication_logs",
+        log_id,
+        "check",
+    )
+    return {"ok": True, "taken_at": utcnow().isoformat(), "medication_name": rem["medication_name"]}
+
+
+@router.delete("/medications/reminders/{reminder_id}")
+def delete_medication_reminder(reminder_id: str, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    rem = store.reminders.get(reminder_id)
+    if not rem or rem["patient_id"] != principal.patient_id:
+        raise HTTPException(404, detail="Medication reminder not found.")
+    del store.reminders[reminder_id]
+    return {"ok": True, "id": reminder_id}
 
 
 @router.get("/reports")

@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ShieldCheck,
   CheckCircle2,
+  Phone,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
@@ -348,6 +349,36 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* 24/7 Emergency & 108 Ambulance Fast Access Banner */}
+        <div className="card p-5 bg-[#fff5f5] border-2 border-red-300 text-[#15232b] shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-300 flex items-center justify-center font-bold">
+              <AlertTriangle className="w-5 h-5 text-red-600 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm md:text-base text-[#15232b]">Emergency Assistance &amp; 108 Ambulance</h3>
+              <p className="text-[#15232b] font-medium text-xs mt-0.5">
+                Immediate access to National Emergency (112) and 24/7 Karnataka Ambulance Service (108).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <a
+              href="tel:108"
+              className="px-4 py-2.5 rounded-xl bg-white text-[#15232b] hover:bg-red-50 text-xs font-extrabold shadow-md transition-colors flex items-center gap-1.5 border border-red-200"
+            >
+              <Phone className="w-3.5 h-3.5 text-red-600" />
+              <span>Call 108 Ambulance</span>
+            </a>
+            <Link
+              href="/emergency"
+              className="px-4 py-2.5 rounded-xl bg-white text-[#15232b] hover:bg-slate-100 text-xs font-bold border border-[#d9d1c3] shadow-md transition-colors"
+            >
+              View 24/7 Trauma Centers
+            </Link>
           </div>
         </div>
       </div>
