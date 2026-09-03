@@ -6,8 +6,10 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     app_secret_key: str = "dev-only-change-me"
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     demo_mode: bool = True
+    database_url: str = ""
+    direct_url: str = ""
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""

@@ -192,7 +192,7 @@ class GeminiAIService:
 ai_service = GeminiAIService()
 
 
-async def run_agent(store: Store, principal: Principal, conversation_id: str | None, message: str) -> dict:
+async def run_agent(store: Store, principal: Principal, conversation_id: str | None, message: str, image_url: str | None = None) -> dict:
     if principal.role != "PATIENT" or not principal.patient_id:
         # doctors use briefing endpoint instead
         if principal.role != "DOCTOR":
@@ -214,6 +214,7 @@ async def run_agent(store: Store, principal: Principal, conversation_id: str | N
                 "conversation_id": cid,
                 "role": "user",
                 "content": message,
+                "image_url": image_url,
                 "tool_name": None,
                 "tool_result_reference": None,
                 "created_at": utcnow(),

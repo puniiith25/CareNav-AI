@@ -46,7 +46,7 @@ def hospital_detail(hospital_id: str, store: Store = Depends(get_store)):
     why = []
     if any("cardiology" in d.get("specialty_code", "") for d in depts):
         why.append("Offers Cardiology")
-    if any(s for hid, sid in store.hospital_services if hid == hospital_id):
+    if any(hid == hospital_id for hid, sid in store.hospital_services):
         why.append("Listed services are based on demo facility data")
     if h["emergency_available"]:
         why.append("Emergency facility available")

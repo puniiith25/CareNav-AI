@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api", tags=["ai-doctor"])
 
 @router.post("/ai/chat")
 async def ai_chat(body: ChatRequest, request: Request, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
-    return await run_agent(store, principal, body.conversation_id, body.message)
+    return await run_agent(store, principal, body.conversation_id, body.message, body.image_url)
 
 
 @router.get("/ai/conversations")

@@ -22,7 +22,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list or ["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,9 +32,11 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def unhandled(_: Request, exc: Exception):
+    import logging
+    logging.getLogger("uvicorn.error").exception("Unhandled Exception:")
     if isinstance(exc, HTTPException):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    return JSONResponse(status_code=500, content={"detail": "Something went wrong. Please try again."})
+    return JSONResponse(status_code=500, content={"detail": str(exc) or "Something went wrong. Please try again."})
 
 
 @app.get("/health")

@@ -35,6 +35,12 @@ def _ser_dt(row: dict) -> dict:
     return {k: iso(v) if isinstance(v, datetime) else v for k, v in row.items()}
 
 
+def _ser_doc(doc: dict | None) -> dict | None:
+    if not doc:
+        return None
+    return {k: v for k, v in _ser_dt(doc).items() if not k.startswith("_")}
+
+
 @router.get("/patients/me")
 def patients_me(principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
     p = store.patients[principal.patient_id]
@@ -74,7 +80,7 @@ def reports(principal: Principal = Depends(require_roles("PATIENT")), store: Sto
         if r["patient_id"] != principal.patient_id:
             continue
         values = [v for v in store.report_values if v["report_id"] == r["id"]]
-        rows.append({**_ser_dt(r), "values": values, "document": store.documents.get(r.get("document_id"))})
+        rows.append({**_ser_dt(r), "values": values, "document": _ser_doc(store.documents.get(r.get("document_id")))})
     rows.sort(key=lambda r: r.get("report_date") or "", reverse=True)
     return rows
 
@@ -102,7 +108,7 @@ def report_detail(report_id: str, principal: Principal = Depends(get_principal),
         ],
         "disclaimer": "AI-generated explanation — not a medical diagnosis.",
     }
-    return {**_ser_dt(r), "values": values, "document": store.documents.get(r.get("document_id")), "previous_reports": previous, "explanation": explanation}
+    return {**_ser_dt(r), "values": values, "document": _ser_doc(store.documents.get(r.get("document_id"))), "previous_reports": previous, "explanation": explanation}
 
 
 @router.post("/reports/compare")
@@ -122,7 +128,7 @@ async def upload_document(
     principal: Principal = Depends(require_roles("PATIENT")),
     store: Store = Depends(get_store),
 ):
-    if file.content_type not in ALLOWED_MIME and not (file.filename or "").lower().endswith((".pdf", ".jpg", ".jpeg", ".png")):
+    if file.content_type not in ALLOWED_MIME and not (file.filename or "").lower().endswith((".pdf", ".jpg", ".jpeg", ".png", ".webp")):
         raise HTTPException(400, detail="That file type is not supported. Upload a PDF, JPG, or PNG.")
     data = await file.read()
     if len(data) > MAX_BYTES:
@@ -135,46 +141,82 @@ async def upload_document(
         "patient_id": principal.patient_id,
         "uploaded_by": principal.user_id,
         "document_type": "lab_report",
-        "title": file.filename or "Uploaded document",
+        "title": file.filename or "Captured Camera Medical Photo",
         "storage_bucket": "medical-documents",
         "storage_path": f"{principal.user_id}/{doc_id}",
-        "mime_type": file.content_type,
+        "mime_type": file.content_type or "image/jpeg",
         "status": "PROCESSING",
         "source": "patient",
         "appointment_id": None,
         "created_at": utcnow(),
         "bytes": len(data),
+        "_raw_data": data,
     }
     store.audit_event(principal.user_id, principal.role, "document.uploaded", "medical_document", doc_id, {"filename": file.filename})
     return {"id": doc_id, "status": "PROCESSING", "prompt": "Would you like to save this to your Health Memory?"}
 
 
+@router.get("/documents/{doc_id}/file")
+def get_document_file(doc_id: str, principal: Principal = Depends(get_principal), store: Store = Depends(get_store)):
+    from fastapi.responses import Response
+
+    doc = store.documents.get(doc_id)
+    if not doc:
+        raise HTTPException(404, detail="That document could not be found.")
+    raw_data = doc.get("_raw_data")
+    if not raw_data:
+        raise HTTPException(404, detail="File data not available.")
+    return Response(content=raw_data, media_type=doc.get("mime_type") or "image/jpeg")
+
+
 @router.post("/reports/{doc_id}/analyze")
-def analyze(doc_id: str, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+async def analyze(doc_id: str, principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
+    from app.ai.provider import ai_provider
+
     doc = store.documents.get(doc_id)
     if not doc or doc["patient_id"] != principal.patient_id:
         raise HTTPException(404, detail="That document could not be found.")
     doc["status"] = "ANALYZING"
-    extracted = demo_extract_lipid_panel()
+    
+    raw_data = doc.get("_raw_data")
+    mime = doc.get("mime_type") or "image/jpeg"
+    
+    if raw_data and mime.startswith("image/"):
+        extracted = await ai_provider.analyze_image(raw_data, mime)
+    else:
+        extracted = demo_extract_lipid_panel()
+
     rid = new_id()
     store.reports[rid] = {
         "id": rid,
         "patient_id": principal.patient_id,
         "document_id": doc_id,
-        "report_date": extracted["report_date"],
-        "hospital_or_lab": extracted["hospital_or_lab"],
-        "doctor_name": extracted["doctor"],
-        "test_name": extracted["test_name"],
-        "document_type": extracted["document_type"],
-        "notes": None,
-        "extraction_confidence": 0.9,
+        "report_date": extracted.get("report_date") or utcnow().date().isoformat(),
+        "hospital_or_lab": extracted.get("hospital_or_lab") or "Diagnostic Facility",
+        "doctor_name": extracted.get("doctor") or "Attending Physician",
+        "test_name": extracted.get("test_name") or "Medical Laboratory Report",
+        "document_type": extracted.get("document_type") or "Laboratory Report",
+        "notes": extracted.get("summary"),
+        "extraction_confidence": 0.95,
         "needs_verification": False,
         "created_at": utcnow(),
     }
-    for v in extracted["values"]:
-        store.report_values.append({"id": new_id(), "report_id": rid, **v, "notes": None, "source_location": None, "needs_verification": v["confidence"] < 0.8})
+    for v in extracted.get("values", []):
+        conf = float(v.get("confidence", 0.9))
+        store.report_values.append({
+            "id": new_id(),
+            "report_id": rid,
+            "test_name": v.get("test_name", "Parameter"),
+            "value": str(v.get("value", "Normal")),
+            "unit": v.get("unit", ""),
+            "reference_range": v.get("reference_range", "Normal"),
+            "notes": None,
+            "source_location": None,
+            "confidence": conf,
+            "needs_verification": conf < 0.8,
+        })
     doc["status"] = "READY"
-    store.add_timeline(principal.patient_id, "report", "Blood report uploaded", "medical_reports", rid, "document")
+    store.add_timeline(principal.patient_id, "report", f"{store.reports[rid]['test_name']} uploaded and analyzed", "medical_reports", rid, "document")
     store.audit_event(principal.user_id, principal.role, "ai.analyzed_report", "medical_report", rid, {})
     store.add_notification(principal.user_id, "new_health_record", "Report analyzed", "Your uploaded document is ready to review.", "medical_report", rid)
     return {
@@ -260,7 +302,7 @@ def appointment_detail(appointment_id: str, principal: Principal = Depends(get_p
         raise HTTPException(403, detail="You don't have permission to view this record.")
     if principal.role == "DOCTOR" and a["doctor_id"] != principal.doctor_id:
         raise HTTPException(403, detail="You don't have permission to view this record.")
-    docs = [store.documents[d] for appt, d in store.appointment_documents if appt == appointment_id and d in store.documents]
+    docs = [_ser_doc(store.documents[d]) for appt, d in store.appointment_documents if appt == appointment_id and d in store.documents]
     consent = store.active_consent(a["doctor_id"], a["patient_id"])
     return {**serialize_appointment(store, a), "documents": docs, "consent": consent}
 
@@ -407,7 +449,7 @@ def update_profile(body: ProfileUpdate, principal: Principal = Depends(require_r
 
 @router.get("/documents")
 def documents(principal: Principal = Depends(require_roles("PATIENT")), store: Store = Depends(get_store)):
-    return [_ser_dt(d) for d in store.documents.values() if d["patient_id"] == principal.patient_id]
+    return [_ser_doc(d) for d in store.documents.values() if d["patient_id"] == principal.patient_id]
 
 
 @router.get("/search")
