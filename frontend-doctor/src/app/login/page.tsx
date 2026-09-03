@@ -20,7 +20,7 @@ export default function DoctorLoginPage() {
     setError(null);
     try {
       await login(email, password);
-      router.push("/doctor/dashboard");
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Invalid doctor credentials.");
     } finally {

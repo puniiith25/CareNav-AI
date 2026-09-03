@@ -20,7 +20,7 @@ export default function HospitalLoginPage() {
     setError(null);
     try {
       await login(email, password);
-      router.push("/hospital/dashboard");
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Invalid hospital administration credentials.");
     } finally {

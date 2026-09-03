@@ -50,6 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearToken();
       setUser(null);
       setPatient(null);
+      // If token expired or invalid, auto-login demo patient
+      await loginDemo().catch(() => {});
     } finally {
       setLoading(false);
     }

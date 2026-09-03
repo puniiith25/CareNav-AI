@@ -32,24 +32,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const token = getToken();
       if (!token) {
-        // If on patient routes without token, auto-login demo patient for seamless demonstration
-        if (typeof window !== "undefined" && !window.location.pathname.startsWith("/doctor") && !window.location.pathname.startsWith("/hospital")) {
-          await loginDemo();
-          return;
-        }
-        setLoading(false);
+        await loginDemo();
         return;
       }
       const data = await api<{ user: User; profile: Profile; patient_id?: string; doctor_id?: string; hospital_id?: string }>("/api/auth/me");
       setUser({ ...data.user, profile: data.profile });
-      if (data.patient_id) {
-        const p = await api<Patient>("/api/patients/me").catch(() => null);
-        if (p) setPatient(p);
-      }
     } catch {
       clearToken();
       setUser(null);
-      setPatient(null);
+      await loginDemo().catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -73,17 +64,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await api<{ access_token: string; user: User }>("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email: "demo.patient@carenav.demo", password: "CareNavDemo!23" }),
+        body: JSON.stringify({ email: "dr.sharma@carenav.demo", password: "CareNavDemo!23" }),
       });
       setToken(res.access_token);
-      const meData = await api<{ user: User; profile: Profile; patient_id?: string }>("/api/auth/me");
+      const meData = await api<{ user: User; profile: Profile }>("/api/auth/me");
       setUser({ ...meData.user, profile: meData.profile });
-      if (meData.patient_id) {
-        const p = await api<Patient>("/api/patients/me").catch(() => null);
-        if (p) setPatient(p);
-      }
     } catch (err) {
-      console.error("Demo login error:", err);
+      console.error("Doctor demo login error:", err);
     } finally {
       setLoading(false);
     }
