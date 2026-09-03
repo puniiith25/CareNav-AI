@@ -264,6 +264,7 @@ function HealthcareMapContent() {
               <span>List ({filteredHospitals.length})</span>
             </button>
           </div>
+        </div>
       </div>
 
       {/* Quick Suggested Hospital Pills */}
