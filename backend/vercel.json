@@ -13,5 +13,8 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ]
+  ],
+  "env": {
+    "CORS_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:3002,https://care-nav-ai-mhyb.vercel.app"
+  }
 }
