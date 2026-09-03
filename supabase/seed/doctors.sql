@@ -1,0 +1,12 @@
+-- Synthetic Doctors in Bengaluru
+
+insert into public.doctors (id, hospital_id, full_name, specialty, qualifications, experience_years, languages, consultation_type, bio)
+values
+  ('55555555-5555-5555-5555-555555555501', '44444444-4444-4444-4444-444444444401', 'Dr. Ananya Sharma', 'Cardiology', 'MBBS, MD (General Medicine), DM (Cardiology)', 12, '{"English", "Hindi", "Kannada"}', 'in_person', 'Interventional cardiologist specializing in preventive cardiology, coronary angioplasty, and lipid disorders.'),
+  ('55555555-5555-5555-5555-555555555502', '44444444-4444-4444-4444-444444444401', 'Dr. Rahul Menon', 'Cardiology', 'MBBS, MD, DNB (Cardiology)', 10, '{"English", "Malayalam", "Kannada"}', 'in_person', 'Non-invasive cardiologist with deep expertise in echocardiography, stress testing, and hypertension management.'),
+  ('55555555-5555-5555-5555-555555555503', '44444444-4444-4444-4444-444444444402', 'Dr. Kavya Rao', 'Orthopedics', 'MBBS, MS (Orthopedics), Fellowship in Joint Replacement', 9, '{"English", "Kannada", "Telugu"}', 'in_person', 'Orthopedic surgeon focusing on knee joint preservation, arthroscopy, sports trauma, and robotic knee replacements.'),
+  ('55555555-5555-5555-5555-555555555504', '44444444-4444-4444-4444-444444444402', 'Dr. Vikram Sethi', 'Orthopedics', 'MBBS, MS (Ortho), DNB', 15, '{"English", "Hindi", "Punjabi"}', 'in_person', 'Senior orthopedic consultant specializing in complex spine surgery, chronic back pain, and trauma reconstruction.'),
+  ('55555555-5555-5555-5555-555555555505', '44444444-4444-4444-4444-444444444403', 'Dr. Arjun Nair', 'Neurology', 'MBBS, MD, DM (Neurology)', 14, '{"English", "Malayalam", "Hindi"}', 'in_person', 'Neurologist with focus on stroke prevention, migraine treatments, peripheral neuropathies, and epilepsy care.'),
+  ('55555555-5555-5555-5555-555555555506', '44444444-4444-4444-4444-444444444404', 'Dr. Priya Iyer', 'Ophthalmology', 'MBBS, MS (Ophthalmology), FRCS', 8, '{"English", "Tamil", "Kannada"}', 'in_person', 'Cornea and cataract specialist skilled in bladeless LASIK, dry eye treatment, and diabetic eye screenings.'),
+  ('55555555-5555-5555-5555-555555555507', '44444444-4444-4444-4444-444444444405', 'Dr. Meera Nambiar', 'Pediatrics', 'MBBS, MD (Pediatrics)', 11, '{"English", "Hindi", "Kannada"}', 'in_person', 'Pediatrician handling infant wellness, childhood immunization schedules, developmental milestones, and acute illnesses.')
+on conflict (id) do nothing;
