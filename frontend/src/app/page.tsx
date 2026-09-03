@@ -64,37 +64,36 @@ export default function Dashboard() {
         {/* Header Greeting */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#15232b]">
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#0c1920]">
               {dashboardData?.greeting || "Good evening"}, {user?.profile?.full_name?.split(" ")[0] || "Arjun"} 👋
             </h1>
-            <p className="text-sm md:text-base text-[#5c6b73] mt-1">
+            <p className="text-sm md:text-base text-[#3d505a] font-medium mt-1">
               Let&apos;s take care of your healthcare journey.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <Link
               href="/map"
-              className="btn btn-ghost text-xs md:text-sm flex items-center gap-2 bg-white hover:bg-[#f3efe6]"
+              className="btn btn-ghost text-xs md:text-sm font-semibold flex items-center gap-2 bg-white text-[#0f6e6e] border-[#bce2df] hover:bg-[#e4f2f1] shadow-xs"
             >
               <MapPin className="w-4 h-4 text-[#0f6e6e]" />
-              <span>Explore Bengaluru Map</span>
+              <span>Explore Healthcare Map</span>
             </Link>
           </div>
         </div>
 
         {/* AI Assistant Hero Card */}
-        <div className="card p-6 md:p-8 bg-gradient-to-br from-[#0f6e6e] to-[#0b4f4f] text-white shadow-lg relative overflow-hidden">
-          <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+        <div className="card p-6 md:p-8 bg-[#0a4d4d] text-white shadow-xl relative overflow-hidden border-2 border-[#0f6e6e]">
           <div className="relative z-10 max-w-3xl">
-            <div className="flex items-center gap-2 text-emerald-200 text-xs font-bold uppercase tracking-wider mb-2">
-              <Bot className="w-4 h-4" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-400 text-xs font-extrabold uppercase tracking-wider mb-3">
+              <Bot className="w-4 h-4 text-emerald-500" />
               <span>CareNav AI Health Assistant</span>
             </div>
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight mb-2">
+            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-2.5 text-black drop-shadow-xs">
               How can I help you today?
             </h2>
-            <p className="text-emerald-100/90 text-sm mb-6">
-              Ask about your symptoms, upload medical documents, organize records, or find verified healthcare services.
+            <p className="text-emerald-500 text-sm md:text-base font-medium mb-6 leading-relaxed opacity-95">
+              Ask about your health, upload medical photos, verify lab parameters with Gemini, or navigate verified clinics.
             </p>
 
             <form onSubmit={handleAiSubmit} className="flex gap-2">
@@ -102,12 +101,12 @@ export default function Dashboard() {
                 type="text"
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
-                placeholder="Ask about your health, reports, or care navigation..."
-                className="flex-1 px-4 py-3 rounded-xl bg-white text-[#15232b] placeholder-[#5c6b73] text-sm md:text-base outline-none shadow-sm focus:ring-2 focus:ring-emerald-300"
+                placeholder="Ask about your symptoms, scan a report, or request guidance..."
+                className="flex-1 px-4 py-3.5 rounded-xl bg-white text-[#0c1920] placeholder-[#5c6b73] text-sm md:text-base outline-none shadow-md font-medium focus:ring-2 focus:ring-emerald-400"
               />
               <button
                 type="submit"
-                className="px-5 py-3 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-[#0b4f4f] font-bold text-sm shadow-sm transition-colors flex items-center gap-2 shrink-0"
+                className="px-6 py-3.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-[#073333] font-extrabold text-sm shadow-md transition-all flex items-center gap-2 shrink-0 hover:scale-102"
               >
                 <span>Ask AI</span>
                 <ArrowRight className="w-4 h-4" />
@@ -115,12 +114,12 @@ export default function Dashboard() {
             </form>
 
             {/* Quick Actions Chips */}
-            <div className="flex flex-wrap gap-2 mt-4 pt-2">
+            <div className="flex flex-wrap gap-2 mt-4 pt-1">
               {quickActions.map((action, i) => (
                 <button
                   key={i}
                   onClick={() => router.push(`/ai?prompt=${encodeURIComponent(action.prompt)}`)}
-                  className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-xs text-white transition-colors"
+                  className="px-3.5 py-1.5 rounded-full bg-white text-[#0a4d4d] hover:bg-emerald-50 text-xs font-bold transition-all shadow-xs"
                 >
                   {action.label}
                 </button>
@@ -132,29 +131,29 @@ export default function Dashboard() {
         {/* 3-Column Grid: Upcoming Appointment, Latest Report, Today's Medication */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Upcoming Appointment */}
-          <div className="card p-5 flex flex-col justify-between">
+          <div className="card p-5 flex flex-col justify-between bg-white border border-[#d9d1c3] shadow-xs">
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-[#d9d1c3]/60">
+              <div className="flex items-center justify-between pb-3 border-b border-[#d9d1c3]/70">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#0f6e6e]">
                   <Calendar className="w-4 h-4" />
                   <span>Upcoming Appointment</span>
                 </div>
-                <span className="status bg-[#e4f2f1] text-[#0b4f4f]">Confirmed</span>
+                <span className="status bg-[#e4f2f1] text-[#0b4f4f] font-bold">Confirmed</span>
               </div>
 
               {dashboardData?.upcoming_appointment ? (
                 <div className="py-4 space-y-2">
-                  <div className="text-base font-bold text-[#15232b]">
+                  <div className="text-base font-bold text-[#0c1920]">
                     {dashboardData.upcoming_appointment.doctor?.full_name || "Dr. Ananya Sharma"}
                   </div>
-                  <div className="text-xs font-semibold text-[#0f6e6e]">
+                  <div className="text-xs font-bold text-[#0f6e6e]">
                     {dashboardData.upcoming_appointment.doctor?.specialty || "Cardiology"}
                   </div>
-                  <div className="text-xs text-[#5c6b73] flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 shrink-0" />
+                  <div className="text-xs text-[#3d505a] font-medium flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 shrink-0 text-[#0f6e6e]" />
                     <span className="truncate">{dashboardData.upcoming_appointment.hospital?.name || "Bengaluru Heart & Multispecialty Hospital"}</span>
                   </div>
-                  <div className="text-xs font-semibold text-[#15232b] pt-1">
+                  <div className="text-xs font-bold text-[#0c1920] pt-1">
                     🗓️ Sep 3, 2026 · 4:30 PM
                   </div>
                 </div>
@@ -165,16 +164,16 @@ export default function Dashboard() {
               )}
             </div>
 
-            <div className="pt-3 border-t border-[#d9d1c3]/60 flex items-center justify-between gap-2">
+            <div className="pt-3 border-t border-[#d9d1c3]/70 flex items-center justify-between gap-2">
               <Link
                 href="/appointments"
-                className="btn btn-ghost text-xs w-full justify-center bg-white hover:bg-[#f3efe6]"
+                className="btn btn-ghost text-xs w-full justify-center bg-[#fbf9f4] hover:bg-[#f3efe6] text-[#0c1920] font-semibold"
               >
-                View Appointment
+                View Details
               </Link>
               <Link
                 href="/map"
-                className="btn btn-primary text-xs w-full justify-center"
+                className="btn btn-primary text-xs w-full justify-center font-bold"
               >
                 Directions
               </Link>
@@ -182,90 +181,84 @@ export default function Dashboard() {
           </div>
 
           {/* Latest Blood Report Card */}
-          <div className="card p-5 flex flex-col justify-between">
+          <div className="card p-5 flex flex-col justify-between bg-white border border-[#d9d1c3] shadow-xs">
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-[#d9d1c3]/60">
+              <div className="flex items-center justify-between pb-3 border-b border-[#d9d1c3]/70">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#0f6e6e]">
                   <FileText className="w-4 h-4" />
-                  <span>Latest Report</span>
+                  <span>Latest Lab Report</span>
                 </div>
-                <span className="status bg-emerald-50 text-emerald-700">Analyzed</span>
+                <span className="status bg-emerald-100 text-emerald-900 font-bold">Analyzed</span>
               </div>
 
               <div className="py-4 space-y-2">
-                <div className="text-base font-bold text-[#15232b]">Complete Blood Count</div>
-                <div className="text-xs text-[#5c6b73]">Demo Diagnostics Lab · Sep 1, 2026</div>
-                <div className="bg-[#f3efe6] p-2.5 rounded-xl text-xs space-y-1 mt-2">
-                  <div className="flex justify-between font-medium text-[#15232b]">
+                <div className="text-base font-bold text-[#0c1920]">Complete Blood Count</div>
+                <div className="text-xs text-[#3d505a] font-medium">Demo Diagnostics Lab · Sep 1, 2026</div>
+                <div className="bg-[#fbf9f4] border border-[#d9d1c3]/70 p-3 rounded-xl text-xs space-y-1.5 mt-2">
+                  <div className="flex justify-between font-semibold text-[#0c1920]">
                     <span>Hemoglobin:</span>
                     <span className="font-bold text-[#0f6e6e]">13.8 g/dL (Normal)</span>
                   </div>
-                  <div className="flex justify-between text-[#5c6b73]">
+                  <div className="flex justify-between text-[#3d505a] font-medium">
                     <span>WBC:</span>
-                    <span>7.0 x10^9/L</span>
+                    <span className="font-semibold text-[#0c1920]">7.0 x10^9/L</span>
                   </div>
-                  <div className="flex justify-between text-[#5c6b73]">
+                  <div className="flex justify-between text-[#3d505a] font-medium">
                     <span>Platelets:</span>
-                    <span>228 x10^9/L</span>
+                    <span className="font-semibold text-[#0c1920]">228 x10^9/L</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-[#d9d1c3]/60 flex items-center gap-2">
+            <div className="pt-3 border-t border-[#d9d1c3]/70 flex items-center gap-2">
               <Link
-                href="/reports/66666666-6666-6666-6666-666666666602"
-                className="btn btn-primary text-xs w-full justify-center"
+                href="/ai"
+                className="btn btn-primary text-xs w-full justify-center font-bold"
               >
-                View Report & AI Breakdown
-              </Link>
-              <Link
-                href="/reports/compare"
-                className="btn btn-ghost text-xs w-full justify-center bg-white"
-              >
-                Compare Reports
+                Open in AI Assistant &amp; Breakdown
               </Link>
             </div>
           </div>
 
           {/* Today's Medications */}
-          <div className="card p-5 flex flex-col justify-between">
+          <div className="card p-5 flex flex-col justify-between bg-white border border-[#d9d1c3] shadow-xs">
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-[#d9d1c3]/60">
+              <div className="flex items-center justify-between pb-3 border-b border-[#d9d1c3]/70">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#0f6e6e]">
                   <Pill className="w-4 h-4" />
                   <span>Today&apos;s Medications</span>
                 </div>
-                <span className="text-xs text-[#5c6b73]">2 active</span>
+                <span className="text-xs font-bold text-[#0f6e6e] bg-[#e4f2f1] px-2 py-0.5 rounded-full">2 active</span>
               </div>
 
-              <div className="py-4 space-y-3">
-                <div className="p-2.5 rounded-xl bg-white border border-[#d9d1c3]/60 flex items-center justify-between">
+              <div className="py-4 space-y-2.5">
+                <div className="p-3 rounded-xl bg-[#fbf9f4] border border-[#d9d1c3]/70 flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-[#15232b]">Atorvastatin (Demo)</div>
-                    <div className="text-[0.7rem] text-[#5c6b73]">10 mg · Night after dinner</div>
+                    <div className="text-xs font-bold text-[#0c1920]">Atorvastatin</div>
+                    <div className="text-[0.7rem] text-[#3d505a] font-medium">10 mg · Night after dinner</div>
                   </div>
-                  <span className="text-[0.7rem] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 font-semibold border border-amber-200">
+                  <span className="text-[0.7rem] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold border border-amber-300">
                     Night
                   </span>
                 </div>
 
-                <div className="p-2.5 rounded-xl bg-white border border-[#d9d1c3]/60 flex items-center justify-between">
+                <div className="p-3 rounded-xl bg-[#fbf9f4] border border-[#d9d1c3]/70 flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-[#15232b]">Vitamin D3 (Demo)</div>
-                    <div className="text-[0.7rem] text-[#5c6b73]">60,000 IU · Once weekly</div>
+                    <div className="text-xs font-bold text-[#0c1920]">Vitamin D3</div>
+                    <div className="text-[0.7rem] text-[#3d505a] font-medium">60,000 IU · Once weekly</div>
                   </div>
-                  <span className="text-[0.7rem] px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 font-semibold border border-blue-200">
+                  <span className="text-[0.7rem] px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold border border-blue-300">
                     Weekly
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-[#d9d1c3]/60">
+            <div className="pt-3 border-t border-[#d9d1c3]/70">
               <Link
                 href="/medications"
-                className="btn btn-ghost text-xs w-full justify-center bg-white hover:bg-[#f3efe6]"
+                className="btn btn-ghost text-xs w-full justify-center bg-[#fbf9f4] hover:bg-[#f3efe6] text-[#0c1920] font-semibold"
               >
                 Open Medication Schedule
               </Link>
@@ -276,13 +269,13 @@ export default function Dashboard() {
         {/* 2-Column Section: Health Timeline & Recovery Plan */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Health Activity */}
-          <div className="card p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-[#d9d1c3]/60">
-              <div className="flex items-center gap-2 text-sm font-bold text-[#15232b]">
-                <Clock className="w-4 h-4 text-[#0f6e6e]" />
+          <div className="card p-6 bg-white border border-[#d9d1c3] shadow-xs">
+            <div className="flex items-center justify-between pb-4 border-b border-[#d9d1c3]/70">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#0c1920]">
+                <Clock className="w-4.5 h-4.5 text-[#0f6e6e]" />
                 <span>Recent Health Activity</span>
               </div>
-              <Link href="/timeline" className="text-xs text-[#0f6e6e] font-semibold hover:underline flex items-center gap-1">
+              <Link href="/timeline" className="text-xs text-[#0f6e6e] font-bold hover:underline flex items-center gap-1">
                 <span>View Full Timeline</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Link>
@@ -294,8 +287,8 @@ export default function Dashboard() {
                   📄
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-semibold text-[#15232b]">Complete Blood Count Report Analyzed</div>
-                  <div className="text-xs text-[#5c6b73]">Sep 1, 2026 · AI generated patient-friendly summary</div>
+                  <div className="text-sm font-bold text-[#0c1920]">Complete Blood Count Report Analyzed</div>
+                  <div className="text-xs text-[#3d505a] font-medium">Sep 1, 2026 · AI generated patient-friendly summary</div>
                 </div>
               </div>
 
@@ -304,8 +297,8 @@ export default function Dashboard() {
                   💊
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-semibold text-[#15232b]">Prescription Added</div>
-                  <div className="text-xs text-[#5c6b73]">Aug 28, 2026 · Dr. Ananya Sharma (Cardiology)</div>
+                  <div className="text-sm font-bold text-[#0c1920]">Prescription Added</div>
+                  <div className="text-xs text-[#3d505a] font-medium">Aug 28, 2026 · Dr. Ananya Sharma (Cardiology)</div>
                 </div>
               </div>
 
@@ -314,43 +307,43 @@ export default function Dashboard() {
                   🩺
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-semibold text-[#15232b]">Doctor Visit Completed</div>
-                  <div className="text-xs text-[#5c6b73]">Aug 28, 2026 · Bengaluru Heart & Multispecialty Hospital</div>
+                  <div className="text-sm font-bold text-[#0c1920]">Doctor Visit Completed</div>
+                  <div className="text-xs text-[#3d505a] font-medium">Aug 28, 2026 · Bengaluru Heart & Multispecialty Hospital</div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Active Recovery & Wellness Plan */}
-          <div className="card p-6">
-            <div className="flex items-center justify-between pb-4 border-b border-[#d9d1c3]/60">
-              <div className="flex items-center gap-2 text-sm font-bold text-[#15232b]">
-                <Activity className="w-4 h-4 text-[#0f6e6e]" />
-                <span>Active Recovery & Follow-up Plan</span>
+          <div className="card p-6 bg-white border border-[#d9d1c3] shadow-xs">
+            <div className="flex items-center justify-between pb-4 border-b border-[#d9d1c3]/70">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#0c1920]">
+                <Activity className="w-4.5 h-4.5 text-[#0f6e6e]" />
+                <span>Active Recovery &amp; Follow-up Plan</span>
               </div>
-              <Link href="/recovery" className="text-xs text-[#0f6e6e] font-semibold hover:underline flex items-center gap-1">
+              <Link href="/recovery" className="text-xs text-[#0f6e6e] font-bold hover:underline flex items-center gap-1">
                 <span>View Details</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
             <div className="pt-4 space-y-3">
-              <div className="p-3 rounded-xl bg-white border border-[#d9d1c3]/60">
+              <div className="p-3.5 rounded-xl bg-[#fbf9f4] border border-[#d9d1c3]/70">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-[#15232b]">Cardiology Follow-Up Regimen</span>
-                  <span className="status bg-emerald-50 text-emerald-700">In Progress</span>
+                  <span className="text-xs font-bold text-[#0c1920]">Cardiology Follow-Up Regimen</span>
+                  <span className="status bg-emerald-100 text-emerald-900 font-bold">In Progress</span>
                 </div>
-                <div className="text-xs text-[#5c6b73] mb-3">
+                <div className="text-xs text-[#3d505a] font-medium mb-3">
                   Documented instructions from Dr. Ananya Sharma following consultation.
                 </div>
-                <div className="space-y-1.5 text-xs text-[#15232b]">
+                <div className="space-y-1.5 text-xs text-[#0c1920] font-medium">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#0f6e6e]" />
+                    <CheckCircle2 className="w-4 h-4 text-[#0f6e6e] shrink-0" />
                     <span>Take prescribed lipid regulation medication daily</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#0f6e6e]" />
-                    <span>Repeat lipid profile & CBC prior to 4-week review</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#0f6e6e] shrink-0" />
+                    <span>Repeat lipid profile &amp; CBC prior to 4-week review</span>
                   </div>
                 </div>
               </div>

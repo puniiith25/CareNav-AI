@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Bot, Sparkles, Send, ShieldCheck, FileText, User, ArrowRight } from "lucide-react";
 import { DoctorAppShell } from "@/components/layout/DoctorAppShell";
+import { FormattedChatContent } from "@/components/common/FormattedChatContent";
 import { api } from "@/lib/api";
 
 export default function DoctorAIAssistantPage() {
@@ -96,7 +97,11 @@ export default function DoctorAIAssistantPage() {
                     : "bg-slate-950 border border-slate-800 text-slate-200"
                 }`}
               >
-                <div className="whitespace-pre-wrap">{m.content}</div>
+                {m.role === "user" ? (
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                ) : (
+                  <FormattedChatContent content={m.content} className="text-slate-200" />
+                )}
                 {m.sources && (
                   <div className="pt-2 border-t border-slate-800/80 text-[10px] text-teal-400 space-y-1">
                     <p className="font-semibold uppercase tracking-wider">Consented Sources:</p>

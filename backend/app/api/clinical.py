@@ -181,10 +181,10 @@ async def analyze(doc_id: str, principal: Principal = Depends(require_roles("PAT
     raw_data = doc.get("_raw_data")
     mime = doc.get("mime_type") or "image/jpeg"
     
-    if raw_data and mime.startswith("image/"):
+    if raw_data:
         extracted = await ai_provider.analyze_image(raw_data, mime)
     else:
-        extracted = demo_extract_lipid_panel()
+        raise HTTPException(400, detail="Document data is empty. Please capture or upload a document photo.")
 
     rid = new_id()
     store.reports[rid] = {

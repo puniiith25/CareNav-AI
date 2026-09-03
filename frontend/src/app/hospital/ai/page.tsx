@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, Sparkles, Send, Building2 } from "lucide-react";
 import { HospitalAppShell } from "@/components/layout/HospitalAppShell";
+import { FormattedChatContent } from "@/components/common/FormattedChatContent";
 import { api } from "@/lib/api";
 
 export default function HospitalAIAssistantPage() {
@@ -86,7 +87,11 @@ export default function HospitalAIAssistantPage() {
                     : "bg-slate-950 border border-slate-800 text-slate-200"
                 }`}
               >
-                <div className="whitespace-pre-wrap">{m.content}</div>
+                {m.role === "user" ? (
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                ) : (
+                  <FormattedChatContent content={m.content} className="text-slate-200" />
+                )}
                 {m.disclaimer && (
                   <p className="text-[10px] text-slate-500 italic pt-1">{m.disclaimer}</p>
                 )}

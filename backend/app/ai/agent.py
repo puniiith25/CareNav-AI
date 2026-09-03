@@ -16,9 +16,16 @@ SYSTEM = """You are CareNav, an AI healthcare navigator and health-memory assist
 You are NOT a doctor. You do not diagnose, prescribe, or say the user is safe.
 When answering about a patient, use only tool results. Never fabricate records.
 If data is missing say: "I don't have enough information in your records to answer that reliably."
-Style: clear, short, friendly, non-alarming. Use "Your report shows..." not "You definitely have..."
-Distinguish educational knowledge from patient-specific facts.
-If symptoms may be life-threatening, stop normal chat and urge emergency services and nearby emergency facilities.
+Style: clear, well-structured, formatted, friendly, non-alarming.
+Formatting rules:
+- Always format your responses using clean Markdown.
+- Use clear bold section titles (e.g. ### What Your Report Shows, ### Key Findings, ### Questions For Your Doctor).
+- Use bullet points (- or *) for parameters, findings, or options.
+- Bold important labels, numbers, units, and terms (e.g. **Hemoglobin: 13.8 g/dL**).
+- Use numbered lists (1., 2.) for action steps or preparation questions.
+- If comparing values or listing lab parameters, use clear markdown tables or bulleted parameter lines.
+- Distinguish educational knowledge from patient-specific facts.
+- If symptoms may be life-threatening, stop normal chat and urge emergency services and nearby emergency facilities.
 """
 
 LIFE_THREAT = re.compile(
@@ -35,7 +42,7 @@ def plan_tools(message: str) -> list[tuple[str, dict]]:
     if "compare" in m and "report" in m:
         steps.append(("get_medical_reports", {}))
         steps.append(("compare_reports", {}))
-    elif "blood report" in m or "latest report" in m or "last report" in m or "lab" in m:
+    elif any(w in m for w in ["report", "blood", "test", "scan", "upload", "doctor", "analy", "lipid", "cbc", "result"]):
         steps.append(("get_medical_reports", {}))
         steps.append(("get_report_details", {}))
     elif "medication" in m or "prescribe" in m or "medicine" in m:
@@ -50,7 +57,7 @@ def plan_tools(message: str) -> list[tuple[str, dict]]:
         steps.append(("find_healthcare_services", {"query": "orthopedics"}))
         steps.append(("find_hospitals", {"specialty": "orthopedics"}))
         steps.append(("find_doctors", {"specialty": "orthopedics"}))
-    elif "hospital" in m or "map" in m or "near" in m or "doctor" in m or "consult" in m:
+    elif "hospital" in m or "map" in m or "near" in m:
         steps.append(("find_healthcare_services", {"query": "cardiology"}))
         steps.append(("find_hospitals", {"specialty": "cardiology"}))
         steps.append(("find_doctors", {"specialty": "cardiology"}))
@@ -67,6 +74,7 @@ def plan_tools(message: str) -> list[tuple[str, dict]]:
         steps.append(("get_doctor_availability", {}))
         steps.append(("create_appointment", {}))
     else:
+        steps.append(("get_medical_reports", {}))
         steps.append(("get_health_records", {}))
     return steps
 
@@ -150,6 +158,16 @@ def _render_without_llm(message: str, tool_outputs: list[dict]) -> str:
 async def maybe_gemini(prompt: str, tool_outputs: list[dict]) -> str | None:
     if not settings.ai_api_key:
         return None
+    
+    candidate_models = [
+        settings.ai_model,
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+        "gemini-pro-latest",
+        "gemini-3.6-flash",
+    ]
+    candidate_models = [m for i, m in enumerate(candidate_models) if m and m not in candidate_models[:i]]
+
     payload = {
         "contents": [
             {
@@ -157,24 +175,29 @@ async def maybe_gemini(prompt: str, tool_outputs: list[dict]) -> str | None:
                 "parts": [
                     {
                         "text": SYSTEM
-                        + "\n\nUser message:\n"
+                        + "\n\nUser query:\n"
                         + prompt
-                        + "\n\nAuthorized tool results (JSON):\n"
-                        + json.dumps(tool_outputs, default=str)[:12000]
+                        + "\n\nPatient's Authorized Medical Records & Structured Extraction Data (JSON):\n"
+                        + json.dumps(tool_outputs, default=str)[:14000]
                     }
                 ],
             }
         ]
     }
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.ai_model}:generateContent"
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(url, params={"key": settings.ai_api_key}, json=payload)
-            r.raise_for_status()
-            data = r.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        return None
+    
+    for model in candidate_models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        try:
+            async with httpx.AsyncClient(timeout=35) as client:
+                r = await client.post(url, params={"key": settings.ai_api_key}, json=payload)
+                if r.status_code == 200:
+                    data = r.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        return candidates[0]["content"]["parts"][0]["text"]
+        except Exception:
+            continue
+    return None
 
 
 class GeminiAIService:

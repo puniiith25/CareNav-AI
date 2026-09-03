@@ -27,6 +27,7 @@ import {
   Lock,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { FormattedChatContent } from "@/components/common/FormattedChatContent";
 import { api } from "@/lib/api";
 import { MedicalReport } from "@/types";
 
@@ -500,25 +501,7 @@ function AIAssistantContent() {
             <div className="space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-[#d9d1c3]">
                 <span className="font-bold text-xs text-[#15232b]">Uploaded Lab Reports</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={openCamera}
-                    className="p-1.5 rounded-lg bg-[#e4f2f1] text-[#0f6e6e] hover:bg-[#d0ecea] text-xs font-semibold flex items-center gap-1"
-                    title="Take Photo with Camera"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                  </button>
-                  <label className="p-1.5 rounded-lg bg-[#0f6e6e] text-white hover:bg-[#0b4f4f] text-xs font-semibold flex items-center gap-1 cursor-pointer">
-                    <UploadCloud className="w-3.5 h-3.5" />
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+                <span className="text-[0.68rem] text-[#5c6b73] font-medium">{reports.length} records</span>
               </div>
 
               <div className="space-y-1.5 max-h-[calc(100vh-22rem)] overflow-y-auto">
@@ -545,31 +528,6 @@ function AIAssistantContent() {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="pt-3 border-t border-[#d9d1c3] text-[0.7rem] text-[#5c6b73] space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-[#15232b]">Add Hard Copy / Paper Report</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={openCamera}
-              className="w-full py-2 px-2 rounded-xl border border-[#0f6e6e] bg-[#e4f2f1]/50 hover:bg-[#e4f2f1] text-xs text-[#0f6e6e] font-semibold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Camera className="w-3.5 h-3.5" />
-              <span>Camera Photo</span>
-            </button>
-            <label className="w-full py-2 px-2 rounded-xl border border-dashed border-[#0f6e6e] bg-white hover:bg-[#e4f2f1]/30 text-xs text-[#0f6e6e] font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>File Upload</span>
-              <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
-          </div>
         </div>
       </div>
 
@@ -600,27 +558,8 @@ function AIAssistantContent() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={openCamera}
-              className="btn btn-ghost text-xs bg-white border border-[#d9d1c3] hover:border-[#0f6e6e] hidden sm:flex items-center gap-1.5"
-            >
-              <Camera className="w-3.5 h-3.5 text-[#0f6e6e]" />
-              <span>Camera Scan</span>
-            </button>
-            <label className="btn btn-ghost text-xs bg-white border border-[#d9d1c3] hover:border-[#0f6e6e] cursor-pointer hidden sm:flex items-center gap-1.5">
-              <UploadCloud className="w-3.5 h-3.5 text-[#0f6e6e]" />
-              <span>Upload File</span>
-              <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
-            <div className="text-[0.7rem] px-2.5 py-1 rounded-full bg-[#e4f2f1] text-[#0b4f4f] font-semibold">
-              Authorized Patient Scope
-            </div>
+          <div className="text-[0.7rem] px-2.5 py-1 rounded-full bg-[#e4f2f1] text-[#0b4f4f] font-semibold">
+            Authorized Patient Scope
           </div>
         </div>
 
@@ -634,32 +573,8 @@ function AIAssistantContent() {
               <div>
                 <h3 className="font-bold text-lg text-[#15232b]">How can CareNav assist you today?</h3>
                 <p className="text-xs text-[#5c6b73] mt-1">
-                  Have a paper report? Take a camera photo to let Gemini extract test values, or ask questions below.
+                  Use the camera or upload buttons in the chat bar below to scan reports, or ask any health question.
                 </p>
-              </div>
-
-              {/* Direct Camera Scan & File Upload Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div
-                  onClick={openCamera}
-                  className="p-4 rounded-2xl border-2 border-[#0f6e6e]/40 bg-[#e4f2f1]/30 hover:bg-[#e4f2f1]/60 hover:border-[#0f6e6e] text-center space-y-1.5 cursor-pointer transition-all shadow-xs"
-                >
-                  <Camera className="w-6 h-6 text-[#0f6e6e] mx-auto" />
-                  <div className="text-xs font-bold text-[#15232b]">Scan Paper / Physical Report</div>
-                  <p className="text-[0.7rem] text-[#5c6b73]">Take picture with camera → Gemini OCR extracts report</p>
-                </div>
-
-                <label className="p-4 rounded-2xl border-2 border-dashed border-[#d9d1c3] bg-white hover:border-[#0f6e6e] text-center space-y-1.5 cursor-pointer transition-all shadow-xs">
-                  <UploadCloud className="w-6 h-6 text-[#0f6e6e] mx-auto" />
-                  <div className="text-xs font-bold text-[#15232b]">Upload PDF or Image File</div>
-                  <p className="text-[0.7rem] text-[#5c6b73]">Choose existing digital file from device</p>
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-left">
@@ -729,7 +644,7 @@ function AIAssistantContent() {
                 )}
 
                 {/* Main Message Content */}
-                <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                <FormattedChatContent content={m.content} isUser={m.role === "user"} />
 
                 {/* Healthcare Navigator Card if AI detected specialty need */}
                 {m.navigate && m.navigate.category !== "all" && (
@@ -1191,12 +1106,13 @@ function AIAssistantContent() {
                 </button>
                 <button
                   onClick={() => {
-                    router.push(`/reports/compare`);
+                    setSelectedReport(null);
+                    sendMessage(`Compare my recent reports and show key trend changes.`);
                   }}
                   className="btn btn-ghost text-xs bg-[#f3efe6]"
                 >
                   <BarChart2 className="w-3.5 h-3.5 mr-1" />
-                  <span>Compare Trends</span>
+                  <span>Compare Trends with AI</span>
                 </button>
               </div>
             </div>

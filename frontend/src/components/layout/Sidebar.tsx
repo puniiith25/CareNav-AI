@@ -29,7 +29,6 @@ export function Sidebar() {
     { label: "Home", href: "/", icon: Home },
     { label: "AI Assistant", href: "/ai", icon: Bot, highlight: true },
     { label: "Health Records", href: "/health", icon: Heart },
-    { label: "Reports", href: "/reports", icon: FileText },
     { label: "Medications", href: "/medications", icon: Pill },
     { label: "Appointments", href: "/appointments", icon: Calendar },
     { label: "Healthcare Map", href: "/map", icon: MapPin, badge: "Map" },
