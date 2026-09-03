@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any
@@ -164,11 +165,9 @@ async def maybe_gemini(prompt: str, tool_outputs: list[dict]) -> str | None:
         return None
     
     candidate_models = [
+        "gemini-3.6-flash",
         settings.ai_model,
         "gemini-flash-latest",
-        "gemini-flash-lite-latest",
-        "gemini-pro-latest",
-        "gemini-3.6-flash",
     ]
     candidate_models = [m for i, m in enumerate(candidate_models) if m and m not in candidate_models[:i]]
 
@@ -192,13 +191,16 @@ async def maybe_gemini(prompt: str, tool_outputs: list[dict]) -> str | None:
     for model in candidate_models:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         try:
-            async with httpx.AsyncClient(timeout=35) as client:
+            async with httpx.AsyncClient(timeout=8) as client:
                 r = await client.post(url, params={"key": settings.ai_api_key}, json=payload)
                 if r.status_code == 200:
                     data = r.json()
                     candidates = data.get("candidates", [])
                     if candidates:
-                        return candidates[0]["content"]["parts"][0]["text"]
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        for part in parts:
+                            if "text" in part and part["text"].strip():
+                                return part["text"].strip()
         except Exception:
             continue
     return None
@@ -206,8 +208,13 @@ async def maybe_gemini(prompt: str, tool_outputs: list[dict]) -> str | None:
 
 class GeminiAIService:
     async def chat(self, message: str, tool_outputs: list[dict]) -> str:
-        llm = await maybe_gemini(message, tool_outputs)
-        return llm or _render_without_llm(message, tool_outputs)
+        try:
+            llm = await asyncio.wait_for(maybe_gemini(message, tool_outputs), timeout=6.0)
+            if llm:
+                return llm
+        except Exception:
+            pass
+        return _render_without_llm(message, tool_outputs)
 
     async def analyze_document(self, filename: str) -> dict:
         # Prototype: synthetic extraction for the demo lipid panel; never invent extra tests.

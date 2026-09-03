@@ -4,7 +4,8 @@
       "src": "api/index.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "50mb"
+        "maxLambdaSize": "50mb",
+        "maxDuration": 60
       }
     }
   ],
@@ -20,7 +21,7 @@
     "APP_SECRET_KEY": "7e388e2df584c37941a52ba8f34037594c09d30ddf9a00f282d70ffe6a5fa351",
     "AI_PROVIDER": "gemini",
     "AI_API_KEY": "AQ.Ab8RN6I8EUjuLIMDxl3beXRjvUQ40YQnhpBulqAWU9oRUYmq9Q",
-    "AI_MODEL": "gemini-2.0-flash",
+    "AI_MODEL": "gemini-3.6-flash",
     "CORS_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:3002,https://care-nav-ai-mhyb.vercel.app"
   }
 }
