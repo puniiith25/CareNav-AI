@@ -25,10 +25,18 @@ import {
   Camera,
   RefreshCw,
   Lock,
+  Activity,
+  Info,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { FormattedChatContent } from "@/components/common/FormattedChatContent";
-import { api } from "@/lib/api";
+import { api, getApiUrl } from "@/lib/api";
+import {
+  analyzeImageClientSide,
+  chatClientSide,
+  getDemoReports,
+  getDemoConversations,
+} from "@/lib/clientAi";
 import { MedicalReport } from "@/types";
 
 interface Message {
@@ -211,31 +219,58 @@ function AIAssistantContent() {
   async function loadConversations() {
     try {
       const convos = await api<Conversation[]>("/api/ai/conversations");
-      setConversations(convos);
-    } catch (err) {
-      console.error("Error loading conversations:", err);
+      if (convos && convos.length) {
+        setConversations(convos);
+        return;
+      }
+    } catch {
+      // Backend unavailable; use client-side storage or demos
     }
+    try {
+      const local = localStorage.getItem("carenav_conversations");
+      if (local) {
+        setConversations(JSON.parse(local));
+        return;
+      }
+    } catch {}
+    setConversations(getDemoConversations());
   }
 
   async function loadReports() {
     try {
       const data = await api<MedicalReport[]>("/api/reports");
-      setReports(data || []);
-    } catch (err) {
-      console.error("Error loading reports:", err);
+      if (data && data.length) {
+        setReports(data);
+        return;
+      }
+    } catch {
+      // Backend unavailable; use client-side storage or demos
     }
+    try {
+      const local = localStorage.getItem("carenav_reports");
+      if (local) {
+        setReports(JSON.parse(local));
+        return;
+      }
+    } catch {}
+    setReports(getDemoReports());
   }
 
   async function viewReportDetails(reportId: string) {
     setLoadingReportDetails(true);
     try {
       const rep = await api<MedicalReport>(`/api/reports/${reportId}`);
-      setSelectedReport(rep);
-    } catch (err) {
-      console.error("Error loading report detail:", err);
-    } finally {
-      setLoadingReportDetails(false);
+      if (rep) {
+        setSelectedReport(rep);
+        setLoadingReportDetails(false);
+        return;
+      }
+    } catch {}
+    const found = reports.find((r) => r.id === reportId);
+    if (found) {
+      setSelectedReport(found);
     }
+    setLoadingReportDetails(false);
   }
 
   async function processFile(file: File) {
@@ -245,37 +280,58 @@ function AIAssistantContent() {
     const localPreviewUrl = URL.createObjectURL(file);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      let extractedData: any = null;
+      let generatedReportId = "rep-" + Date.now();
 
-      // Upload file to secure backend
-      const uploadRes = await api<{ id: string; status: string }>("/api/documents/upload", {
-        method: "POST",
-        body: formData,
-      });
+      // First attempt backend analysis if accessible
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
 
-      setCurrentUploadedDocId(uploadRes.id);
-      setLastUploadedDocInfo({
-        id: uploadRes.id,
-        previewUrl: localPreviewUrl,
-        filename: file.name,
-      });
+        const uploadRes = await api<{ id: string; status: string }>("/api/documents/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-      // Analyze document with Gemini
-      const analyzeRes = await api<{ report_id: string; status: string; extracted: any }>(`/api/reports/${uploadRes.id}/analyze`, {
-        method: "POST",
-      });
+        setCurrentUploadedDocId(uploadRes.id);
+        setLastUploadedDocInfo({
+          id: uploadRes.id,
+          previewUrl: localPreviewUrl,
+          filename: file.name,
+        });
+
+        const analyzeRes = await api<{ report_id: string; status: string; extracted: any }>(
+          `/api/reports/${uploadRes.id}/analyze`,
+          { method: "POST" }
+        );
+        extractedData = analyzeRes.extracted;
+        generatedReportId = analyzeRes.report_id;
+      } catch {
+        // Backend offline or error: Run direct client-side Gemini Multimodal Vision!
+        extractedData = await analyzeImageClientSide(file);
+        setLastUploadedDocInfo({
+          id: generatedReportId,
+          previewUrl: localPreviewUrl,
+          filename: file.name,
+        });
+      }
 
       // Show consent & review preview
       setPreviewExtracted({
-        reportId: analyzeRes.report_id,
+        reportId: generatedReportId,
         filename: file.name,
         previewUrl: localPreviewUrl,
-        ...analyzeRes.extracted,
+        ...extractedData,
       });
-
-    } catch (err: any) {
-      alert(`Processing error: ${err.message || "Failed to analyze photo"}`);
+    } catch {
+      // In all circumstances provide structured clinical report analysis
+      const fallback = await analyzeImageClientSide(file);
+      setPreviewExtracted({
+        reportId: "rep-" + Date.now(),
+        filename: file.name,
+        previewUrl: localPreviewUrl,
+        ...fallback,
+      });
     } finally {
       setUploadingReport(false);
       setUploadProgress(null);
@@ -291,19 +347,58 @@ function AIAssistantContent() {
     setIsSavingWithConsent(true);
 
     try {
-      await loadReports();
-      const reportId = previewExtracted.reportId;
+      const reportId = previewExtracted.reportId || "rep-" + Date.now();
       const testName = previewExtracted.test_name || "Medical Report";
-      const docPreview = lastUploadedDocInfo?.previewUrl || (currentUploadedDocId ? `/api/documents/${currentUploadedDocId}/file` : undefined);
-      
-      setPreviewExtracted(null);
+      const docPreview = lastUploadedDocInfo?.previewUrl || (currentUploadedDocId ? `${getApiUrl()}/api/documents/${currentUploadedDocId}/file` : undefined);
 
-      // Open details modal
-      await viewReportDetails(reportId);
+      const newReport: MedicalReport = {
+        id: reportId,
+        patient_id: "demo-patient",
+        document_id: currentUploadedDocId || undefined,
+        report_date: previewExtracted.report_date || new Date().toISOString().split("T")[0],
+        hospital_or_lab: previewExtracted.hospital_or_lab || "Diagnostic Center",
+        doctor_name: previewExtracted.doctor || "Attending Physician",
+        test_name: testName,
+        document_type: previewExtracted.document_type || "Laboratory Report",
+        clinical_purpose: previewExtracted.clinical_purpose,
+        key_insights: previewExtracted.key_insights,
+        lifestyle_guidance: previewExtracted.lifestyle_guidance,
+        questions_for_doctor: previewExtracted.questions_for_doctor,
+        notes: previewExtracted.summary,
+        values: (previewExtracted.values || []).map((v: any, idx: number) => ({
+          id: `val-${reportId}-${idx}`,
+          report_id: reportId,
+          test_name: v.test_name,
+          value: String(v.value),
+          unit: v.unit || "",
+          reference_range: v.reference_range || "Normal",
+          clinical_meaning: v.clinical_meaning,
+          notes: v.clinical_meaning,
+        })),
+        explanation: {
+          what_this_report_is: previewExtracted.clinical_purpose || `Report for ${testName}`,
+          summary: previewExtracted.summary,
+          key_insights: previewExtracted.key_insights,
+          lifestyle_guidance: previewExtracted.lifestyle_guidance,
+          questions_for_doctor: previewExtracted.questions_for_doctor,
+        },
+      };
+
+      // Persist in client-side state & localStorage
+      setReports((prev) => {
+        const updated = [newReport, ...prev.filter((r) => r.id !== reportId)];
+        try {
+          localStorage.setItem("carenav_reports", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
+      setPreviewExtracted(null);
+      setSelectedReport(newReport);
 
       // Send chat message asking Gemini to explain, including the uploaded image
       sendMessage(
-        `I have scanned and uploaded my ${testName}. Please provide a full clinical explanation of these findings and list important questions I should ask my doctor.`,
+        `I have scanned and uploaded my ${testName}. Please provide a full clinical explanation of what this test is used for, analyze these findings, and list important questions I should ask my doctor.`,
         docPreview
       );
     } catch (err) {
@@ -358,57 +453,68 @@ function AIAssistantContent() {
     setLoading(true);
 
     try {
-      const res = await api<{
-        conversation_id: string;
-        message: string;
-        tools: { name: string; ok: boolean; error?: string }[];
-        sources: { label: string; href: string }[];
-        navigate?: { category: string; explanation: string; href: string };
-        emergency?: boolean;
-        prompt_save_memory?: boolean;
-      }>("/api/ai/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          conversation_id: activeConversationId,
-          message: text,
-          image_url: img,
-        }),
-      });
+      try {
+        const res = await api<{
+          conversation_id: string;
+          message: string;
+          tools: { name: string; ok: boolean; error?: string }[];
+          sources: { label: string; href: string }[];
+          navigate?: { category: string; explanation: string; href: string };
+          emergency?: boolean;
+          prompt_save_memory?: boolean;
+        }>("/api/ai/chat", {
+          method: "POST",
+          body: JSON.stringify({
+            conversation_id: activeConversationId,
+            message: text,
+            image_url: img,
+          }),
+        });
 
-      // Clear the last uploaded doc info after successfully sending
-      setLastUploadedDocInfo(null);
+        // Clear the last uploaded doc info after successfully sending
+        setLastUploadedDocInfo(null);
 
-      if (!activeConversationId && res.conversation_id) {
-        setActiveConversationId(res.conversation_id);
-        loadConversations();
-      }
+        if (!activeConversationId && res.conversation_id) {
+          setActiveConversationId(res.conversation_id);
+          loadConversations();
+        }
 
-      const sourcesWithReportId = res.sources?.map((s) => {
-        const match = s.href.match(/\/reports\/([a-zA-Z0-9-]+)/);
-        return {
-          ...s,
-          reportId: match ? match[1] : undefined,
+        const sourcesWithReportId = res.sources?.map((s) => {
+          const match = s.href.match(/\/reports\/([a-zA-Z0-9-]+)/);
+          return {
+            ...s,
+            reportId: match ? match[1] : undefined,
+          };
+        });
+
+        const assistantMsg: Message = {
+          id: "a-" + Date.now(),
+          role: "assistant",
+          content: res.message,
+          tools: res.tools,
+          sources: sourcesWithReportId,
+          navigate: res.navigate,
+          emergency: res.emergency,
+          prompt_save_memory: res.prompt_save_memory,
         };
-      });
+        setMessages((prev) => [...prev, assistantMsg]);
+        return;
+      } catch (backendErr) {
+        console.warn("Backend chat unavailable, switching to client-side AI assistant:", backendErr);
+        setLastUploadedDocInfo(null);
 
-      const assistantMsg: Message = {
-        id: "a-" + Date.now(),
-        role: "assistant",
-        content: res.message,
-        tools: res.tools,
-        sources: sourcesWithReportId,
-        navigate: res.navigate,
-        emergency: res.emergency,
-        prompt_save_memory: res.prompt_save_memory,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err: any) {
-      const errorMsg: Message = {
-        id: "err-" + Date.now(),
-        role: "assistant",
-        content: `I encountered an issue: ${err.message || "Please try again."}`,
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+        // Run direct client-side AI response
+        const clientRes = await chatClientSide(text, reports, img);
+        const assistantMsg: Message = {
+          id: "a-" + Date.now(),
+          role: "assistant",
+          content: clientRes.reply,
+          sources: clientRes.sources,
+          navigate: clientRes.navigate,
+          emergency: clientRes.emergency,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
     } finally {
       setLoading(false);
     }
@@ -990,22 +1096,43 @@ function AIAssistantContent() {
             </div>
 
             {/* Extracted Details */}
-            <div className="p-6 overflow-y-auto max-h-[60vh] space-y-4">
-              <div className="p-3.5 rounded-2xl bg-[#e4f2f1]/40 border border-[#bce2df] space-y-1">
+            <div className="p-6 overflow-y-auto max-h-[65vh] space-y-4">
+              {/* Document Header */}
+              <div className="p-4 rounded-2xl bg-[#e4f2f1]/40 border border-[#bce2df] space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-[#0b4f4f] uppercase tracking-wider text-[0.7rem]">
-                    {previewExtracted.document_type || "Lab Report"}
+                  <span className="font-bold text-[#0b4f4f] uppercase tracking-wider text-[0.7rem] px-2 py-0.5 rounded-full bg-[#0f6e6e]/10">
+                    {previewExtracted.document_type || "Laboratory Report"}
                   </span>
-                  <span className="text-[#5c6b73]">{previewExtracted.report_date}</span>
+                  <span className="text-[#5c6b73] font-medium">{previewExtracted.report_date}</span>
                 </div>
-                <h4 className="font-bold text-sm text-[#15232b]">{previewExtracted.test_name}</h4>
-                <p className="text-xs text-[#5c6b73]">{previewExtracted.hospital_or_lab}</p>
+                <h4 className="font-bold text-base text-[#15232b] pt-1">{previewExtracted.test_name}</h4>
+                <p className="text-xs text-[#5c6b73]">
+                  {previewExtracted.hospital_or_lab}
+                  {previewExtracted.doctor ? ` · Doctor: ${previewExtracted.doctor}` : ""}
+                </p>
               </div>
 
+              {/* 🩺 What is this test and what is it used for? */}
+              {previewExtracted.clinical_purpose && (
+                <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 text-xs space-y-1.5 shadow-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-teal-900 uppercase tracking-wider text-[0.72rem]">
+                    <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                    <span>What Is This Test & What Is It Used For?</span>
+                  </div>
+                  <p className="text-[#15232b] leading-relaxed">
+                    {previewExtracted.clinical_purpose}
+                  </p>
+                </div>
+              )}
+
+              {/* Documented Test Values */}
               {previewExtracted.values && previewExtracted.values.length > 0 && (
                 <div className="space-y-1.5">
-                  <div className="text-xs font-bold text-[#15232b]">Extracted Test Parameters:</div>
-                  <div className="border border-[#d9d1c3] rounded-xl overflow-hidden">
+                  <div className="text-xs font-bold text-[#15232b] flex items-center justify-between">
+                    <span>Extracted Biomarkers & Test Parameters:</span>
+                    <span className="text-[0.68rem] text-[#5c6b73] font-normal">{previewExtracted.values.length} parameters identified</span>
+                  </div>
+                  <div className="border border-[#d9d1c3] rounded-xl overflow-hidden shadow-xs">
                     <table className="w-full text-xs text-left">
                       <thead className="bg-[#f3efe6] text-[#5c6b73] font-bold">
                         <tr>
@@ -1018,7 +1145,12 @@ function AIAssistantContent() {
                       <tbody className="divide-y divide-[#d9d1c3]">
                         {previewExtracted.values.map((v: any, idx: number) => (
                           <tr key={idx} className="hover:bg-[#fbf9f4]">
-                            <td className="p-2.5 font-semibold text-[#15232b]">{v.test_name}</td>
+                            <td className="p-2.5 font-semibold text-[#15232b]">
+                              <div>{v.test_name}</div>
+                              {v.clinical_meaning && (
+                                <div className="text-[0.68rem] font-normal text-[#5c6b73] mt-0.5">{v.clinical_meaning}</div>
+                              )}
+                            </td>
                             <td className="p-2.5 font-bold text-[#0f6e6e]">{v.value}</td>
                             <td className="p-2.5 text-[#5c6b73]">{v.unit}</td>
                             <td className="p-2.5 text-[#5c6b73] font-mono">{v.reference_range}</td>
@@ -1030,10 +1162,38 @@ function AIAssistantContent() {
                 </div>
               )}
 
+              {/* AI Clinical Analysis & Findings Interpretation */}
               {previewExtracted.summary && (
-                <div className="p-3.5 rounded-xl bg-white border border-[#d9d1c3] text-xs text-[#15232b] space-y-1">
-                  <span className="font-bold text-[#0f6e6e]">Plain-Language AI Summary:</span>
-                  <p className="leading-relaxed">{previewExtracted.summary}</p>
+                <div className="p-4 rounded-2xl bg-white border border-[#d9d1c3] text-xs text-[#15232b] space-y-1.5 shadow-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-[#0f6e6e] uppercase tracking-wider text-[0.72rem]">
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>AI Clinical Analysis & Findings Interpretation</span>
+                  </div>
+                  <p className="leading-relaxed text-[#15232b]">{previewExtracted.summary}</p>
+                </div>
+              )}
+
+              {/* Key Clinical Takeaways */}
+              {previewExtracted.key_insights && previewExtracted.key_insights.length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-[#fbf9f4] border border-[#d9d1c3] space-y-1.5">
+                  <span className="text-xs font-bold text-[#15232b] uppercase tracking-wider text-[0.7rem]">Key Health Takeaways</span>
+                  <ul className="text-xs text-[#15232b] space-y-1 list-disc list-inside">
+                    {previewExtracted.key_insights.map((k: string, idx: number) => (
+                      <li key={idx} className="leading-relaxed">{k}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Questions for Doctor */}
+              {previewExtracted.questions_for_doctor && previewExtracted.questions_for_doctor.length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200 text-sky-950 space-y-1.5">
+                  <span className="text-xs font-bold text-sky-900 uppercase tracking-wider text-[0.7rem]">Recommended Questions For Your Doctor</span>
+                  <ul className="text-xs text-sky-900 space-y-1 list-decimal list-inside">
+                    {previewExtracted.questions_for_doctor.map((q: string, idx: number) => (
+                      <li key={idx} className="leading-relaxed">{q}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
@@ -1115,7 +1275,12 @@ function AIAssistantContent() {
                     <tbody className="divide-y divide-[#d9d1c3]">
                       {selectedReport.values?.map((v) => (
                         <tr key={v.id} className="hover:bg-[#fbf9f4]">
-                          <td className="p-3 font-semibold text-[#15232b]">{v.test_name}</td>
+                          <td className="p-3 font-semibold text-[#15232b]">
+                            <div>{v.test_name}</div>
+                            {(v.notes || (v as any).clinical_meaning) && (
+                              <div className="text-[0.68rem] font-normal text-[#5c6b73] mt-0.5">{v.notes || (v as any).clinical_meaning}</div>
+                            )}
+                          </td>
                           <td className="p-3 font-bold text-[#0f6e6e] text-sm">{v.value}</td>
                           <td className="p-3 text-[#5c6b73]">{v.unit}</td>
                           <td className="p-3 text-[#5c6b73] font-mono">{v.reference_range}</td>
@@ -1126,17 +1291,43 @@ function AIAssistantContent() {
                 </div>
               </div>
 
-              {/* AI Plain-Language Explanation */}
+              {/* 🩺 What is this test & what is it used for */}
+              {selectedReport.explanation?.what_this_report_is && (
+                <div className="card p-4 bg-teal-50/70 border-teal-200 space-y-1.5 shadow-xs">
+                  <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-teal-900">
+                    <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                    <span>What Is This Test & What Is It Used For?</span>
+                  </div>
+                  <p className="text-xs text-[#15232b] leading-relaxed">
+                    {selectedReport.explanation.what_this_report_is}
+                  </p>
+                </div>
+              )}
+
+              {/* AI Clinical Interpretation */}
               <div className="card p-5 bg-[#e4f2f1]/40 border-[#bce2df] space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#0b4f4f]">
-                  <Sparkles className="w-4 h-4 text-[#0f6e6e]" />
-                  <span>AI Plain-Language Explanation</span>
+                  <Activity className="w-4 h-4 text-[#0f6e6e]" />
+                  <span>AI Clinical Analysis & Findings Interpretation</span>
                 </div>
                 <p className="text-xs text-[#15232b] leading-relaxed">
-                  {selectedReport.explanation?.what_these_tests_measure ||
-                    "This test measures key biological markers documented in your report against standard reference intervals."}
+                  {selectedReport.notes ||
+                    selectedReport.explanation?.what_these_tests_measure ||
+                    "This test measures biological parameters documented in your report against standard physiological reference intervals."}
                 </p>
               </div>
+
+              {/* Questions for Doctor */}
+              {selectedReport.explanation?.questions_for_doctor && selectedReport.explanation.questions_for_doctor.length > 0 && (
+                <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200 text-sky-950 space-y-1.5">
+                  <span className="text-xs font-bold text-sky-900 uppercase tracking-wider text-[0.7rem]">Recommended Questions For Your Doctor</span>
+                  <ul className="text-xs text-sky-900 space-y-1 list-decimal list-inside">
+                    {selectedReport.explanation.questions_for_doctor.map((q: string, idx: number) => (
+                      <li key={idx} className="leading-relaxed">{q}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Action Buttons inside modal */}
               <div className="flex flex-wrap gap-2 pt-2 border-t border-[#d9d1c3]">

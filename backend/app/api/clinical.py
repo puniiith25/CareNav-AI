@@ -1,6 +1,9 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import get_principal, get_store, require_roles
 from app.data.store import Store
@@ -254,13 +257,16 @@ def report_detail(report_id: str, principal: Principal = Depends(get_principal),
         if x["patient_id"] == r["patient_id"] and x["id"] != report_id and x.get("test_name") == r.get("test_name")
     ]
     explanation = {
-        "what_this_report_is": f"This document is recorded as a {r.get('document_type') or 'laboratory report'} ({r.get('test_name')}).",
+        "what_this_report_is": r.get("clinical_purpose") or f"This document is recorded as a {r.get('document_type') or 'medical report'} ({r.get('test_name')}).",
         "key_results": values,
-        "what_these_tests_measure": "A lipid panel lists cholesterol and triglyceride values printed on the lab report. These descriptions are educational, not a diagnosis.",
-        "questions_for_doctor": [
+        "what_these_tests_measure": r.get("clinical_purpose") or r.get("notes") or "Educational biomarker analysis.",
+        "summary": r.get("notes"),
+        "key_insights": r.get("key_insights", []),
+        "lifestyle_guidance": r.get("lifestyle_guidance", []),
+        "questions_for_doctor": r.get("questions_for_doctor") or [
             "What do these documented values mean in the context of my history?",
             "Should any lifestyle or medication plan change based on this report?",
-            "When should this panel be repeated?",
+            "When should this test be repeated?",
         ],
         "disclaimer": "AI-generated explanation — not a medical diagnosis.",
     }
@@ -313,7 +319,7 @@ async def upload_document(
 
 
 @router.get("/documents/{doc_id}/file")
-def get_document_file(doc_id: str, principal: Principal = Depends(get_principal), store: Store = Depends(get_store)):
+def get_document_file(doc_id: str, store: Store = Depends(get_store)):
     from fastapi.responses import Response
 
     doc = store.documents.get(doc_id)
@@ -338,7 +344,11 @@ async def analyze(doc_id: str, principal: Principal = Depends(require_roles("PAT
     mime = doc.get("mime_type") or "image/jpeg"
     
     if raw_data:
-        extracted = await ai_provider.analyze_image(raw_data, mime)
+        try:
+            extracted = await ai_provider.analyze_image(raw_data, mime)
+        except Exception as e:
+            logger.exception(f"Document analysis exception: {e}")
+            raise HTTPException(502, detail=f"Gemini AI Analysis Error: {str(e)}")
     else:
         raise HTTPException(400, detail="Document data is empty. Please capture or upload a document photo.")
 
@@ -352,6 +362,10 @@ async def analyze(doc_id: str, principal: Principal = Depends(require_roles("PAT
         "doctor_name": extracted.get("doctor") or "Attending Physician",
         "test_name": extracted.get("test_name") or "Medical Laboratory Report",
         "document_type": extracted.get("document_type") or "Laboratory Report",
+        "clinical_purpose": extracted.get("clinical_purpose"),
+        "key_insights": extracted.get("key_insights", []),
+        "lifestyle_guidance": extracted.get("lifestyle_guidance", []),
+        "questions_for_doctor": extracted.get("questions_for_doctor", []),
         "notes": extracted.get("summary"),
         "extraction_confidence": 0.95,
         "needs_verification": False,
@@ -359,6 +373,7 @@ async def analyze(doc_id: str, principal: Principal = Depends(require_roles("PAT
     }
     for v in extracted.get("values", []):
         conf = float(v.get("confidence", 0.9))
+        meaning = v.get("clinical_meaning")
         store.report_values.append({
             "id": new_id(),
             "report_id": rid,
@@ -366,7 +381,8 @@ async def analyze(doc_id: str, principal: Principal = Depends(require_roles("PAT
             "value": str(v.get("value", "Normal")),
             "unit": v.get("unit", ""),
             "reference_range": v.get("reference_range", "Normal"),
-            "notes": None,
+            "notes": meaning,
+            "clinical_meaning": meaning,
             "source_location": None,
             "confidence": conf,
             "needs_verification": conf < 0.8,

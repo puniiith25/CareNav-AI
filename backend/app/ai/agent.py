@@ -26,6 +26,11 @@ Formatting rules:
 - Use numbered lists (1., 2.) for action steps or preparation questions.
 - If comparing values or listing lab parameters, use clear markdown tables or bulleted parameter lines.
 - Distinguish educational knowledge from patient-specific facts.
+- When explaining an uploaded document, laboratory report, or medical scan:
+  * Clearly explain WHAT the test or document is and WHAT IT IS USED FOR in medical practice (e.g. which organ systems, metabolic pathways, or health risks it assesses).
+  * Break down the key findings and explain what each parameter means in context.
+  * Provide an overarching clinical interpretation of what the results indicate for overall wellness.
+  * Provide actionable, thoughtful questions the patient should discuss with their doctor.
 - If symptoms may be life-threatening, stop normal chat and urge emergency services and nearby emergency facilities.
 """
 
@@ -106,15 +111,40 @@ def _render_without_llm(message: str, tool_outputs: list[dict]) -> str:
         det = by["get_report_details"]["result"]
         report = det["report"]
         lines = [
-            f"Your latest documented report is a {report['test_name']} dated {report['report_date']} from {report['hospital_or_lab']}.",
+            f"### 📋 Report Overview: {report['test_name']}",
+            f"**Date:** {report['report_date']} · **Facility:** {report['hospital_or_lab']}" + (f" · **Doctor:** {report['doctor_name']}" if report.get('doctor_name') else ""),
             "",
-            "Key reported results:",
         ]
+        if report.get("clinical_purpose"):
+            lines.extend([
+                "### 🩺 What This Test Is & What It Is Used For",
+                report["clinical_purpose"],
+                "",
+            ])
+        lines.append("### 🔬 Extracted Parameters & Findings")
         for v in det["values"]:
-            flag = " Needs verification." if v.get("needs_verification") else ""
-            lines.append(f"- {v['test_name']}: {v['value']} {v['unit']} (report range {v['reference_range']}).{flag}")
+            flag = " *(Needs verification)*" if v.get("needs_verification") else ""
+            meaning = f" — *{v['notes']}*" if v.get("notes") else ""
+            lines.append(f"- **{v['test_name']}:** {v['value']} {v['unit']} *(Ref: {v['reference_range']})*{meaning}{flag}")
         lines.append("")
-        lines.append("AI-generated explanation — not a medical diagnosis. Open the source document from Reports.")
+        if report.get("notes"):
+            lines.extend([
+                "### 💡 Clinical Analysis & Interpretation",
+                report["notes"],
+                "",
+            ])
+        if report.get("key_insights"):
+            lines.append("### 🔍 Key Health Takeaways")
+            for insight in report["key_insights"]:
+                lines.append(f"- {insight}")
+            lines.append("")
+        if report.get("questions_for_doctor"):
+            lines.append("### 💬 Recommended Questions For Your Doctor")
+            for idx, q in enumerate(report["questions_for_doctor"], 1):
+                lines.append(f"{idx}. {q}")
+            lines.append("")
+        lines.append("---")
+        lines.append("*Educational clinical explanation — not a medical diagnosis. Review the original source document with your physician.*")
         return "\n".join(lines)
     if "find_doctors" in by and by["find_doctors"].get("ok"):
         if "knee" in m:
@@ -165,6 +195,9 @@ async def maybe_gemini(prompt: str, tool_outputs: list[dict]) -> str | None:
         return None
     
     candidate_models = [
+        "gemini-flash-lite-latest",
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
         "gemini-3.6-flash",
         settings.ai_model,
         "gemini-flash-latest",

@@ -74,6 +74,8 @@ export interface ReportValue {
   value: string;
   unit?: string;
   reference_range?: string;
+  notes?: string;
+  clinical_meaning?: string;
   confidence?: number;
   needs_verification?: boolean;
 }
@@ -87,12 +89,20 @@ export interface MedicalReport {
   doctor_name?: string;
   test_name: string;
   document_type: string;
+  notes?: string;
+  clinical_purpose?: string;
+  key_insights?: string[];
+  lifestyle_guidance?: string[];
+  questions_for_doctor?: string[];
   extraction_confidence?: number;
   values?: ReportValue[];
   explanation?: {
     what_this_report_is?: string;
     key_results?: ReportValue[];
     what_these_tests_measure?: string;
+    summary?: string;
+    key_insights?: string[];
+    lifestyle_guidance?: string[];
     questions_for_doctor?: string[];
     disclaimer?: string;
   };

@@ -99,7 +99,9 @@ class GeminiAIProvider(BaseAIProvider):
         }
 
     async def analyze_image(self, image_bytes: bytes, mime_type: str) -> dict[str, Any]:
-        if not self.api_key:
+        import os
+        current_key = self.api_key or settings.ai_api_key or os.environ.get("AI_API_KEY")
+        if not current_key:
             raise ValueError("AI API Key is missing. Please set AI_API_KEY in .env to analyze medical photos.")
 
         import base64
@@ -107,44 +109,55 @@ class GeminiAIProvider(BaseAIProvider):
 
         b64_image = base64.b64encode(image_bytes).decode("utf-8")
         
-        # List of models in order of priority (handles API model version migrations)
+        # Fast multimodal models supported on Google Gemini API
         candidate_models = [
-            settings.ai_model,
-            "gemini-flash-latest",
             "gemini-flash-lite-latest",
-            "gemini-pro-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash-lite",
             "gemini-3.6-flash",
+            "gemini-flash-latest",
         ]
-        # Deduplicate while preserving order
-        candidate_models = [m for i, m in enumerate(candidate_models) if m and m not in candidate_models[:i]]
+        if settings.ai_model and settings.ai_model not in candidate_models:
+            candidate_models.insert(0, settings.ai_model)
 
-        prompt = """You are a highly precise medical document and laboratory report OCR extraction AI.
-Carefully examine this image taken by the patient. 
-Extract ALL authentic visible details, printed lab test names, numerical results, reference ranges, units, physician names, and diagnostic facilities from the photograph into STRICT JSON.
+        prompt = """You are an advanced medical vision AI specialist and clinical diagnostics interpreter.
+Carefully examine this image provided by the patient.
 
-Return ONLY a JSON object matching this structure:
+Do NOT simply transcribe the text. You must provide a DEEP CLINICAL ANALYSIS explaining what this image/document is, what it is used for, why doctors order it, and what the findings mean for the patient in accessible, empathetic language.
+
+Extract all visible details, test parameters, and provide clinical interpretation into STRICT JSON with this exact schema:
 {
-  "document_type": "Laboratory Report or Prescription or Clinical Summary",
-  "test_name": "Actual Title or Primary Investigation from the image (e.g. Complete Blood Count, Liver Function Test, Prescription)",
-  "report_date": "Exact date visible in YYYY-MM-DD or document date format",
-  "hospital_or_lab": "Actual clinic, hospital, or diagnostic center name printed on document",
-  "doctor": "Actual doctor/clinician name if printed, or null",
+  "document_type": "Laboratory Report, Diagnostic Scan, Prescription, Clinical Summary, or Discharge Summary",
+  "test_name": "Primary investigation or document title (e.g. Complete Blood Count (CBC), Lipid Profile, Liver Function Test)",
+  "report_date": "Date visible on the document in YYYY-MM-DD or readable format",
+  "hospital_or_lab": "Diagnostic facility, clinic, or hospital name printed on the document",
+  "doctor": "Attending doctor or clinician name if printed, or null",
+  "clinical_purpose": "Comprehensive explanation of what this test/investigation is and what it is used for in medicine. Detail what body systems, organs, or physiological mechanisms it evaluates (e.g. bone marrow cellularity, oxygen transport capacity, lipid metabolism, renal filtration, hepatic integrity) and why physicians prescribe it.",
   "values": [
     {
-      "test_name": "Exact test / biomarker name from image",
-      "value": "Exact measured value / observation",
-      "unit": "Exact unit (e.g. mg/dL, g/dL, %)",
-      "reference_range": "Exact reference interval printed",
+      "test_name": "Exact biomarker or parameter name from document",
+      "value": "Measured numerical result or observation",
+      "unit": "Measurement unit (e.g. g/dL, mg/dL, %, cells/mcL)",
+      "reference_range": "Normal reference interval printed on document",
+      "clinical_meaning": "Brief explanation of what this specific marker indicates in the body and how this result compares to standard ranges",
       "confidence": 0.98
     }
   ],
-  "summary": "Clear, friendly plain-language clinical summary of the actual parameters found in this photo, highlighting normal or flagged values for educational purposes.",
+  "summary": "In-depth, plain-language clinical analysis of the actual findings. Synthesize the results together to explain the patient's physiological state, whether key systems appear balanced or require attention, and what these results practically mean for everyday health.",
+  "key_insights": [
+    "Clinical takeaway 1 explaining a key finding and its significance",
+    "Clinical takeaway 2 explaining a key finding and its significance",
+    "Clinical takeaway 3 explaining practical health meaning"
+  ],
+  "lifestyle_guidance": [
+    "Practical nutrition, hydration, or wellness recommendation aligned with these results"
+  ],
   "questions_for_doctor": [
-    "Suggested question 1 based on actual findings",
-    "Suggested question 2 based on actual findings"
+    "Specific, insightful question the patient should ask their clinician based on these findings",
+    "Specific question regarding follow-up timeline or baseline comparisons"
   ]
 }
-If the photo is an image of something other than a medical report, extract what is visible with an appropriate summary.
+If the photo is an image of something other than a medical document (e.g., medication box, symptom photo, imaging scan), thoroughly describe its clinical purpose, usage, precautions, and recommendations.
 Return ONLY raw JSON, with no markdown code fences or conversational text."""
 
         payload = {
@@ -161,14 +174,17 @@ Return ONLY raw JSON, with no markdown code fences or conversational text."""
                         }
                     ]
                 }
-            ]
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
         }
 
         last_error = "No models succeeded"
         for model in candidate_models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={current_key}"
             try:
-                async with httpx.AsyncClient(timeout=45.0) as client:
+                async with httpx.AsyncClient(timeout=30.0) as client:
                     res = await client.post(url, json=payload)
                     if res.status_code == 200:
                         data = res.json()
@@ -176,19 +192,25 @@ Return ONLY raw JSON, with no markdown code fences or conversational text."""
                         if candidates:
                             raw_text = candidates[0]["content"]["parts"][0]["text"].strip()
                             if raw_text.startswith("```"):
-                                raw_text = raw_text.strip("`").replace("json\n", "", 1).strip()
+                                raw_text = raw_text.strip("`")
+                                if raw_text.startswith("json\n"):
+                                    raw_text = raw_text[5:]
+                                elif raw_text.startswith("json"):
+                                    raw_text = raw_text[4:]
+                                raw_text = raw_text.strip()
                             parsed = json.loads(raw_text)
                             parsed["status"] = "READY"
+                            logger.info(f"Successfully extracted live document details with Gemini model: {model}")
                             return parsed
                     else:
-                        last_error = f"{model} returned {res.status_code}: {res.text}"
+                        last_error = f"{model} returned {res.status_code}: {res.text[:140]}"
                         logger.warning(f"Gemini model {model} attempt failed: {last_error}")
             except Exception as e:
                 last_error = str(e)
                 logger.warning(f"Gemini model {model} exception: {e}")
 
-        logger.error(f"All Gemini models failed: {last_error}")
-        raise RuntimeError(f"Gemini API Error: {last_error}")
+        logger.error(f"All Gemini live vision models failed: {last_error}")
+        raise RuntimeError(f"Gemini Vision API Error: {last_error}")
 
     async def extract_structured_data(self, text: str, schema_description: str) -> dict[str, Any]:
         return {"extracted": True, "data": text}
